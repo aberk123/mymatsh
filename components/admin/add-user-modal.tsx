@@ -143,6 +143,29 @@ export function AddUserModal({ open, onClose, onSuccess }: AddUserModalProps) {
                 />
               </div>
 
+              {/* Password — grouped with email since phone users log in via OTP */}
+              <div className="pt-1">
+                <Label htmlFor="add-password" required>Password</Label>
+                <div className="relative">
+                  <Input
+                    id="add-password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Min. 8 characters"
+                    error={errors.password?.message}
+                    className="pr-10"
+                    {...register('password')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#888888] hover:text-[#555555]"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
               <div className="flex items-center gap-3 py-1">
                 <div className="flex-1 h-px bg-gray-200" />
                 <span className="text-xs text-[#888888] font-medium">or</span>
@@ -158,29 +181,6 @@ export function AddUserModal({ open, onClose, onSuccess }: AddUserModalProps) {
                   error={errors.phone?.message}
                   {...register('phone')}
                 />
-              </div>
-            </div>
-
-            {/* Password */}
-            <div>
-              <Label htmlFor="add-password" required>Password</Label>
-              <div className="relative">
-                <Input
-                  id="add-password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Min. 8 characters"
-                  error={errors.password?.message}
-                  className="pr-10"
-                  {...register('password')}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#888888] hover:text-[#555555]"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
               </div>
             </div>
 
