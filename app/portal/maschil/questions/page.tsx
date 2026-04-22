@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   HelpCircle,
@@ -31,85 +31,28 @@ interface Question {
   question: string
   is_active: boolean
   created_at: string
-  responses: number
 }
-
-const initialQuestions: Question[] = [
-  {
-    id: '1',
-    question: 'What values are most important to you in a spouse?',
-    is_active: true,
-    created_at: 'Jan 5, 2026',
-    responses: 18,
-  },
-  {
-    id: '2',
-    question: 'How do you envision your Jewish home?',
-    is_active: true,
-    created_at: 'Jan 5, 2026',
-    responses: 15,
-  },
-  {
-    id: '3',
-    question: 'What does a typical Shabbos look like in your ideal home?',
-    is_active: true,
-    created_at: 'Jan 10, 2026',
-    responses: 12,
-  },
-  {
-    id: '4',
-    question: 'How important is continued Torah learning after marriage?',
-    is_active: true,
-    created_at: 'Jan 10, 2026',
-    responses: 20,
-  },
-  {
-    id: '5',
-    question: 'Describe your relationship with your parents and family.',
-    is_active: false,
-    created_at: 'Feb 1, 2026',
-    responses: 8,
-  },
-  {
-    id: '6',
-    question: 'What does a meaningful Yom Tov look like to you?',
-    is_active: true,
-    created_at: 'Feb 15, 2026',
-    responses: 10,
-  },
-  {
-    id: '7',
-    question: 'How do you handle conflict or disagreement?',
-    is_active: true,
-    created_at: 'Mar 1, 2026',
-    responses: 14,
-  },
-  {
-    id: '8',
-    question: 'What role does tzedakah and chesed play in your life?',
-    is_active: false,
-    created_at: 'Mar 20, 2026',
-    responses: 6,
-  },
-]
 
 interface QuestionDialogProps {
   open: boolean
   initial?: Question | null
   onClose: () => void
   onSave: (text: string, active: boolean) => void
+  saving: boolean
 }
 
-function QuestionDialog({ open, initial, onClose, onSave }: QuestionDialogProps) {
+function QuestionDialog({ open, initial, onClose, onSave, saving }: QuestionDialogProps) {
   const [text, setText] = useState(initial?.question ?? '')
   const [active, setActive] = useState(initial?.is_active ?? true)
 
-  if (!open) return null
+  useEffect(() => {
+    if (open) {
+      setText(initial?.question ?? '')
+      setActive(initial?.is_active ?? true)
+    }
+  }, [open, initial])
 
-  function handleSave() {
-    if (!text.trim()) return
-    onSave(text.trim(), active)
-  }
+  if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -156,18 +99,18 @@ function QuestionDialog({ open, initial, onClose, onSave }: QuestionDialogProps)
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button variant="secondary" size="md" onClick={onClose} className="flex-1">
+          <Button variant="secondary" size="md" onClick={onClose} className="flex-1" disabled={saving}>
             Cancel
           </Button>
           <Button
             variant="primary"
             size="md"
-            onClick={handleSave}
-            disabled={!text.trim()}
+            onClick={() => onSave(text.trim(), active)}
+            disabled={!text.trim() || saving}
             className="flex-1 gap-1.5"
           >
             <Check className="h-4 w-4" />
-            {initial ? 'Save Changes' : 'Add Question'}
+            {saving ? 'Saving…' : initial ? 'Save Changes' : 'Add Question'}
           </Button>
         </div>
       </div>
@@ -176,9 +119,24 @@ function QuestionDialog({ open, initial, onClose, onSave }: QuestionDialogProps)
 }
 
 export default function MaschiQuestionsPage() {
-  const [questions, setQuestions] = useState(initialQuestions)
+  const [loading, setLoading] = useState(true)
+  const [questions, setQuestions] = useState<Question[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    async function load() {
+      const res = await fetch('/api/maschil/questions')
+      if (res.ok) {
+        const data = await res.json() as Question[]
+        setQuestions(data)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
 
   function handleOpenAdd() {
     setEditingQuestion(null)
@@ -195,34 +153,69 @@ export default function MaschiQuestionsPage() {
     setEditingQuestion(null)
   }
 
-  function handleSave(text: string, active: boolean) {
-    if (editingQuestion) {
-      setQuestions((prev) =>
-        prev.map((q) =>
-          q.id === editingQuestion.id ? { ...q, question: text, is_active: active } : q
+  async function handleSave(text: string, active: boolean) {
+    setSaving(true)
+    setError('')
+    try {
+      if (editingQuestion) {
+        const res = await fetch(`/api/maschil/questions/${editingQuestion.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: text, is_active: active }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error)
+        setQuestions((prev) =>
+          prev.map((q) =>
+            q.id === editingQuestion.id ? { ...q, question: text, is_active: active } : q
+          )
         )
-      )
-    } else {
-      const newQ: Question = {
-        id: String(Date.now()),
-        question: text,
-        is_active: active,
-        created_at: 'Apr 21, 2026',
-        responses: 0,
+      } else {
+        const res = await fetch('/api/maschil/questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: text, is_active: active }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error)
+        const newQ = await res.json() as Question
+        setQuestions((prev) => [newQ, ...prev])
       }
-      setQuestions((prev) => [newQ, ...prev])
+      handleClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setSaving(false)
     }
-    handleClose()
   }
 
-  function handleToggle(id: string) {
-    setQuestions((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, is_active: !q.is_active } : q))
+  async function handleToggle(id: string) {
+    const q = questions.find((q) => q.id === id)
+    if (!q) return
+    const newActive = !q.is_active
+    const res = await fetch(`/api/maschil/questions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: newActive }),
+    })
+    if (res.ok) {
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === id ? { ...q, is_active: newActive } : q))
+      )
+    }
+  }
+
+  async function handleDelete(id: string) {
+    const res = await fetch(`/api/maschil/questions/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setQuestions((prev) => prev.filter((q) => q.id !== id))
+    }
+  }
+
+  if (loading) {
+    return (
+      <AppLayout navItems={navItems} title="Profile Questions" role="maschil">
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+      </AppLayout>
     )
-  }
-
-  function handleDelete(id: string) {
-    setQuestions((prev) => prev.filter((q) => q.id !== id))
   }
 
   return (
@@ -237,6 +230,12 @@ export default function MaschiQuestionsPage() {
         </Button>
       </div>
 
+      {error && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       {questions.length === 0 ? (
         <EmptyState message="No questions yet. Add your first question to get started." />
       ) : (
@@ -248,7 +247,6 @@ export default function MaschiQuestionsPage() {
                   <th className="table-th w-full">Question</th>
                   <th className="table-th whitespace-nowrap">Status</th>
                   <th className="table-th whitespace-nowrap">Created</th>
-                  <th className="table-th text-center whitespace-nowrap">Responses</th>
                   <th className="table-th text-center whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
@@ -271,9 +269,10 @@ export default function MaschiQuestionsPage() {
                         {q.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="table-td text-[#888888] whitespace-nowrap">{q.created_at}</td>
-                    <td className="table-td text-center">
-                      <span className="font-medium text-[#555555]">{q.responses}</span>
+                    <td className="table-td text-[#888888] whitespace-nowrap">
+                      {new Date(q.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}
                     </td>
                     <td className="table-td">
                       <div className="flex items-center justify-center gap-0.5">
@@ -321,6 +320,7 @@ export default function MaschiQuestionsPage() {
         initial={editingQuestion}
         onClose={handleClose}
         onSave={handleSave}
+        saving={saving}
       />
     </AppLayout>
   )

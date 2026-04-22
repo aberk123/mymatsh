@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   LayoutDashboard,
@@ -12,7 +12,6 @@ import {
   UserCircle,
   Plus,
   Eye,
-  MessageCircle,
   LayoutGrid,
   LayoutList,
 } from 'lucide-react'
@@ -21,13 +20,14 @@ import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { NavItem } from '@/components/ui/sidebar'
 import type { MatchStatus } from '@/types/database'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'My Singles', href: '/dashboard/singles', icon: Users },
   { label: 'Suggestions', href: '/dashboard/matches', icon: Heart },
   { label: 'Calendar', href: '/dashboard/tasks', icon: CalendarCheck },
-  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, badge: '3' },
+  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare },
   { label: 'Groups', href: '/dashboard/groups', icon: UsersRound },
   { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
 ]
@@ -39,17 +39,6 @@ interface Match {
   status: MatchStatus
   createdAt: string
 }
-
-const mockMatches: Match[] = [
-  { id: '1', boyName: 'Yosef Goldstein',    girlName: 'Devorah Friedman',  status: 'pending',    createdAt: 'Apr 1, 2026'  },
-  { id: '2', boyName: 'Shmuel Weiss',       girlName: 'Rivka Blum',        status: 'current',    createdAt: 'Mar 28, 2026' },
-  { id: '3', boyName: 'Menachem Katz',      girlName: 'Leah Shapiro',      status: 'going_out',  createdAt: 'Mar 20, 2026' },
-  { id: '4', boyName: 'Dovid Bernstein',    girlName: 'Chana Levine',      status: 'on_hold',    createdAt: 'Mar 15, 2026' },
-  { id: '5', boyName: 'Aryeh Rosenblatt',   girlName: 'Miriam Cohen',      status: 'past',       createdAt: 'Feb 10, 2026' },
-  { id: '6', boyName: 'Binyamin Schwartz',  girlName: 'Esther Klein',      status: 'engaged',    createdAt: 'Jan 5, 2026'  },
-  { id: '7', boyName: 'Tzvi Feldman',       girlName: 'Sara Horowitz',     status: 'married',    createdAt: 'Nov 12, 2025' },
-  { id: '8', boyName: 'Moshe Silverstein',  girlName: 'Rachel Stern',      status: 'current',    createdAt: 'Apr 10, 2026' },
-]
 
 const ALL_STATUSES: MatchStatus[] = ['pending', 'current', 'going_out', 'on_hold', 'past', 'engaged', 'married']
 
@@ -68,22 +57,76 @@ type FilterTab = 'all' | MatchStatus
 export default function MatchesPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>('all')
   const [view, setView] = useState<'table' | 'kanban'>('table')
+  const [loading, setLoading] = useState(true)
+  const [matches, setMatches] = useState<Match[]>([])
+
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoading(false); return }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profile } = await (supabase.from('shadchan_profiles') as any)
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle() as { data: { id: string } | null }
+
+      if (!profile) { setLoading(false); return }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: rows } = await (supabase.from('matches') as any)
+        .select('id, status, boy_id, girl_id, created_at')
+        .eq('shadchan_id', profile.id)
+        .order('created_at', { ascending: false }) as {
+          data: Array<{ id: string; status: MatchStatus; boy_id: string; girl_id: string; created_at: string }> | null
+        }
+
+      if (!rows || rows.length === 0) { setLoading(false); return }
+
+      const singleIds = Array.from(new Set([
+        ...rows.map((r) => r.boy_id),
+        ...rows.map((r) => r.girl_id),
+      ]))
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: singles } = await (supabase.from('singles') as any)
+        .select('id, first_name, last_name')
+        .in('id', singleIds) as { data: Array<{ id: string; first_name: string; last_name: string }> | null }
+
+      const nameMap = Object.fromEntries(
+        (singles ?? []).map((s) => [s.id, `${s.first_name} ${s.last_name}`.trim()])
+      )
+
+      setMatches(
+        rows.map((r) => ({
+          id: r.id,
+          boyName: nameMap[r.boy_id] ?? '—',
+          girlName: nameMap[r.girl_id] ?? '—',
+          status: r.status,
+          createdAt: new Date(r.created_at).toLocaleDateString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+          }),
+        }))
+      )
+      setLoading(false)
+    }
+    load()
+  }, [])
 
   const filtered = activeTab === 'all'
-    ? mockMatches
-    : mockMatches.filter((m) => m.status === activeTab)
+    ? matches
+    : matches.filter((m) => m.status === activeTab)
 
   function countFor(status: MatchStatus) {
-    return mockMatches.filter((m) => m.status === status).length
+    return matches.filter((m) => m.status === status).length
   }
 
   return (
     <AppLayout navItems={navItems} title="Suggestions" role="shadchan">
-      {/* Header row */}
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-[#1A1A1A]">Suggestions</h2>
         <div className="flex items-center gap-3">
-          {/* View toggle */}
           <div className="flex items-center bg-white rounded-lg border border-gray-200 p-0.5">
             <button
               onClick={() => setView('table')}
@@ -109,27 +152,22 @@ export default function MatchesPage() {
         </div>
       </div>
 
-      {/* Filter tabs */}
       <div className="flex items-center gap-1 flex-wrap mb-6 bg-white rounded-xl border border-gray-200 p-1">
         <button
           onClick={() => setActiveTab('all')}
           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'all'
-              ? 'bg-brand-maroon text-white'
-              : 'text-[#555555] hover:bg-gray-100'
+            activeTab === 'all' ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
           }`}
         >
           All
-          <span className="ms-1.5 text-xs opacity-75">{mockMatches.length}</span>
+          <span className="ms-1.5 text-xs opacity-75">{matches.length}</span>
         </button>
         {ALL_STATUSES.map((status) => (
           <button
             key={status}
             onClick={() => setActiveTab(status)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === status
-                ? 'bg-brand-maroon text-white'
-                : 'text-[#555555] hover:bg-gray-100'
+              activeTab === status ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
             }`}
           >
             {statusLabels[status]}
@@ -138,8 +176,9 @@ export default function MatchesPage() {
         ))}
       </div>
 
-      {/* Table view */}
-      {view === 'table' && (
+      {loading ? (
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+      ) : view === 'table' ? (
         <div className="card overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -165,21 +204,14 @@ export default function MatchesPage() {
                         <div className="font-medium text-[#1A1A1A]">{match.boyName}</div>
                         <div className="text-xs text-[#888888] mt-0.5">+ {match.girlName}</div>
                       </td>
-                      <td className="table-td">
-                        <StatusBadge status={match.status} />
-                      </td>
+                      <td className="table-td"><StatusBadge status={match.status} /></td>
                       <td className="table-td text-[#555555]">{match.createdAt}</td>
                       <td className="table-td">
-                        <div className="flex items-center gap-1">
-                          <Link href={`/dashboard/matches/${match.id}`}>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
-                              <Eye className="h-3.5 w-3.5" />
-                            </Button>
-                          </Link>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Feedback">
-                            <MessageCircle className="h-3.5 w-3.5" />
+                        <Link href={`/dashboard/matches/${match.id}`}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
+                            <Eye className="h-3.5 w-3.5" />
                           </Button>
-                        </div>
+                        </Link>
                       </td>
                     </tr>
                   ))
@@ -188,13 +220,10 @@ export default function MatchesPage() {
             </table>
           </div>
         </div>
-      )}
-
-      {/* Kanban view */}
-      {view === 'kanban' && (
+      ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
           {ALL_STATUSES.map((status) => {
-            const cards = mockMatches.filter((m) => m.status === status)
+            const cards = matches.filter((m) => m.status === status)
             return (
               <div key={status} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between">

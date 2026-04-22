@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -12,21 +12,23 @@ import {
   ClipboardList,
   CheckCircle,
   XCircle,
-  Eye,
   UsersRound,
   Home,
   BookOpen,
   MessageSquare,
+  Search,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { NavItem } from '@/components/ui/sidebar'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { label: 'Users', href: '/admin/users', icon: Users },
-  { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck, badge: '4' },
+  { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck },
   { label: 'Singles', href: '/admin/singles', icon: UsersRound },
   { label: 'Parents', href: '/admin/parents', icon: Home },
   { label: 'Advocates', href: '/admin/advocates', icon: Heart },
@@ -38,34 +40,106 @@ const navItems: NavItem[] = [
   { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
 ]
 
-const initialPending = [
-  { id: '1', name: 'Yankel Grossman', city: 'Lakewood, NJ', email: 'y.grossman@example.com', dateApplied: 'Apr 19, 2026' },
-  { id: '2', name: 'Tzippora Mandelbaum', city: 'Brooklyn, NY', email: 't.mandelbaum@example.com', dateApplied: 'Apr 16, 2026' },
-]
-
-const allMaschilim = [
-  { id: '3', name: 'Pinchas Rubenstein', city: 'Monsey, NY', email: 'p.rubenstein@example.com', approvedDate: 'Mar 15, 2026', status: 'active' },
-  { id: '4', name: 'Chana Berkowitz', city: 'Lakewood, NJ', email: 'c.berkowitz@example.com', approvedDate: 'Feb 28, 2026', status: 'active' },
-  { id: '5', name: 'Moshe Lichtenstein', city: 'Chicago, IL', email: 'm.lichten@example.com', approvedDate: 'Feb 10, 2026', status: 'active' },
-  { id: '6', name: 'Esther Shapiro', city: 'Baltimore, MD', email: 'e.shapiro@example.com', approvedDate: 'Jan 20, 2026', status: 'inactive' },
-  { id: '7', name: 'Binyamin Kessler', city: 'Lawrence, NY', email: 'b.kessler@example.com', approvedDate: 'Jan 8, 2026', status: 'active' },
-]
+interface Maschil {
+  id: string
+  user_id: string
+  full_name: string
+  city: string | null
+  email: string | null
+  is_approved: boolean
+  created_at: string
+}
 
 export default function AdminMaschilimPage() {
   const [tab, setTab] = useState<'pending' | 'all'>('pending')
-  const [pendingList, setPendingList] = useState(initialPending)
+  const [loading, setLoading] = useState(true)
+  const [pendingList, setPendingList] = useState<Maschil[]>([])
+  const [approvedList, setApprovedList] = useState<Maschil[]>([])
+  const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [search, setSearch] = useState('')
 
-  function handleApprove(id: string) {
-    setPendingList((prev) => prev.filter((m) => m.id !== id))
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  async function loadData() {
+    setLoading(true)
+    const supabase = createClient()
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('maschils') as any)
+      .select('id, user_id, full_name, city, email, is_approved, created_at')
+      .order('created_at', { ascending: false }) as { data: Maschil[] | null }
+
+    const all = data ?? []
+    setPendingList(all.filter((m) => !m.is_approved))
+    setApprovedList(all.filter((m) => m.is_approved))
+    setLoading(false)
   }
 
-  function handleReject(id: string) {
-    setPendingList((prev) => prev.filter((m) => m.id !== id))
+  async function handleApprove(id: string) {
+    setActionLoading(true)
+    setActionError('')
+    try {
+      const res = await fetch(`/api/admin/maschilim/${id}/approve`, { method: 'POST' })
+      if (!res.ok) {
+        const json = await res.json()
+        setActionError(json.error ?? 'Approval failed.')
+        return
+      }
+      const maschil = pendingList.find((m) => m.id === id)
+      if (maschil) {
+        setPendingList((prev) => prev.filter((m) => m.id !== id))
+        setApprovedList((prev) => [{ ...maschil, is_approved: true }, ...prev])
+      }
+    } catch {
+      setActionError('Network error. Please try again.')
+    } finally {
+      setActionLoading(false)
+    }
   }
+
+  async function handleReject(id: string) {
+    setActionLoading(true)
+    setActionError('')
+    try {
+      const res = await fetch(`/api/admin/maschilim/${id}/reject`, { method: 'POST' })
+      if (!res.ok) {
+        const json = await res.json()
+        setActionError(json.error ?? 'Rejection failed.')
+        return
+      }
+      setPendingList((prev) => prev.filter((m) => m.id !== id))
+    } catch {
+      setActionError('Network error. Please try again.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const pendingFiltered = pendingList.filter(
+    (m) =>
+      m.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      (m.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (m.city ?? '').toLowerCase().includes(search.toLowerCase())
+  )
+
+  const allFiltered = approvedList.filter(
+    (m) =>
+      m.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      (m.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (m.city ?? '').toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <AppLayout navItems={navItems} title="Maschilim" role="platform_admin">
-      {/* Tabs */}
+      {actionError && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
+
       <div className="flex gap-1 border-b border-gray-200 mb-6">
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -76,9 +150,11 @@ export default function AdminMaschilimPage() {
           onClick={() => setTab('pending')}
         >
           Pending
-          <span className="ml-2 bg-red-100 text-red-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {pendingList.length}
-          </span>
+          {pendingList.length > 0 && (
+            <span className="ml-2 bg-red-100 text-red-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
+              {pendingList.length}
+            </span>
+          )}
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -90,13 +166,25 @@ export default function AdminMaschilimPage() {
         >
           All Maschilim
           <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {allMaschilim.length}
+            {approvedList.length}
           </span>
         </button>
       </div>
 
       <div className="card">
-        {tab === 'pending' ? (
+        <div className="relative mb-4 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#888888]" />
+          <Input
+            placeholder="Search maschilim..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-[#888888] text-sm">Loading…</div>
+        ) : tab === 'pending' ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -109,18 +197,23 @@ export default function AdminMaschilimPage() {
                 </tr>
               </thead>
               <tbody>
-                {pendingList.map((m) => (
+                {pendingFiltered.map((m) => (
                   <tr key={m.id} className="table-row">
-                    <td className="table-td font-medium text-[#1A1A1A]">{m.name}</td>
-                    <td className="table-td text-[#555555]">{m.city}</td>
-                    <td className="table-td text-[#555555]">{m.email}</td>
-                    <td className="table-td text-[#555555]">{m.dateApplied}</td>
+                    <td className="table-td font-medium text-[#1A1A1A]">{m.full_name}</td>
+                    <td className="table-td text-[#555555]">{m.city ?? '—'}</td>
+                    <td className="table-td text-[#555555]">{m.email ?? '—'}</td>
+                    <td className="table-td text-[#555555]">
+                      {new Date(m.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}
+                    </td>
                     <td className="table-td">
                       <div className="flex items-center gap-2">
                         <Button
                           variant="primary"
                           size="sm"
                           className="gap-1"
+                          disabled={actionLoading}
                           onClick={() => handleApprove(m.id)}
                         >
                           <CheckCircle className="h-3.5 w-3.5" />
@@ -130,6 +223,7 @@ export default function AdminMaschilimPage() {
                           variant="danger"
                           size="sm"
                           className="gap-1"
+                          disabled={actionLoading}
                           onClick={() => handleReject(m.id)}
                         >
                           <XCircle className="h-3.5 w-3.5" />
@@ -139,7 +233,7 @@ export default function AdminMaschilimPage() {
                     </td>
                   </tr>
                 ))}
-                {pendingList.length === 0 && (
+                {pendingFiltered.length === 0 && (
                   <tr>
                     <td colSpan={5} className="table-td text-center text-[#888888] py-8">
                       No pending maschilim.
@@ -159,27 +253,29 @@ export default function AdminMaschilimPage() {
                   <th className="table-th">Email</th>
                   <th className="table-th">Approved Date</th>
                   <th className="table-th">Status</th>
-                  <th className="table-th">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {allMaschilim.map((m) => (
+                {allFiltered.map((m) => (
                   <tr key={m.id} className="table-row">
-                    <td className="table-td font-medium text-[#1A1A1A]">{m.name}</td>
-                    <td className="table-td text-[#555555]">{m.city}</td>
-                    <td className="table-td text-[#555555]">{m.email}</td>
-                    <td className="table-td text-[#555555]">{m.approvedDate}</td>
-                    <td className="table-td">
-                      <StatusBadge status={m.status} />
+                    <td className="table-td font-medium text-[#1A1A1A]">{m.full_name}</td>
+                    <td className="table-td text-[#555555]">{m.city ?? '—'}</td>
+                    <td className="table-td text-[#555555]">{m.email ?? '—'}</td>
+                    <td className="table-td text-[#555555]">
+                      {new Date(m.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}
                     </td>
-                    <td className="table-td">
-                      <Button variant="ghost" size="sm" className="gap-1">
-                        <Eye className="h-3.5 w-3.5" />
-                        View
-                      </Button>
-                    </td>
+                    <td className="table-td"><StatusBadge status="active" /></td>
                   </tr>
                 ))}
+                {allFiltered.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="table-td text-center text-[#888888] py-8">
+                      No approved maschilim yet.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard,
@@ -19,110 +21,229 @@ import { AppLayout } from '@/components/ui/app-layout'
 import { Avatar } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import type { NavItem } from '@/components/ui/sidebar'
 import type { MatchStatus } from '@/types/database'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'My Singles', href: '/dashboard/singles', icon: Users },
   { label: 'Suggestions', href: '/dashboard/matches', icon: Heart },
   { label: 'Calendar', href: '/dashboard/tasks', icon: CalendarCheck },
-  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, badge: '3' },
+  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare },
   { label: 'Groups', href: '/dashboard/groups', icon: UsersRound },
   { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
 ]
 
-interface MockMatch {
+const STATUS_OPTIONS: { value: MatchStatus; label: string }[] = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'current', label: 'Current' },
+  { value: 'going_out', label: 'Going Out' },
+  { value: 'on_hold', label: 'On Hold' },
+  { value: 'past', label: 'Past' },
+  { value: 'engaged', label: 'Engaged' },
+  { value: 'married', label: 'Married' },
+]
+
+interface SingleInfo {
+  id: string
+  name: string
+  age: number | null
+  city: string
+  hashkafa: string | null
+}
+
+interface MatchData {
   id: string
   status: MatchStatus
-  createdAt: string
-  boy: {
-    id: string
-    name: string
-    age: number
-    city: string
-    hashkafa: string
+  message: string | null
+  boy_id: string
+  girl_id: string
+  created_at: string
+}
+
+export default function MatchDetailPage() {
+  const params = useParams()
+  const id = params.id as string
+
+  const [loading, setLoading] = useState(true)
+  const [match, setMatch] = useState<MatchData | null>(null)
+  const [boy, setBoy] = useState<SingleInfo | null>(null)
+  const [girl, setGirl] = useState<SingleInfo | null>(null)
+  const [note, setNote] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
+  const [noteError, setNoteError] = useState('')
+
+  const [statusOpen, setStatusOpen] = useState(false)
+  const [newStatus, setNewStatus] = useState<MatchStatus>('pending')
+  const [statusSaving, setStatusSaving] = useState(false)
+  const [statusError, setStatusError] = useState('')
+
+  const [markPastLoading, setMarkPastLoading] = useState(false)
+
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient()
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: matchRow } = await (supabase.from('matches') as any)
+        .select('id, status, message, boy_id, girl_id, created_at')
+        .eq('id', id)
+        .maybeSingle() as { data: MatchData | null }
+
+      if (!matchRow) { setLoading(false); return }
+
+      setMatch(matchRow)
+      setNote(matchRow.message ?? '')
+      setNewStatus(matchRow.status)
+
+      // Load boy and girl singles
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: boySingle } = await (supabase.from('singles') as any)
+        .select('id, first_name, last_name, age, city, state, hashkafa')
+        .eq('id', matchRow.boy_id)
+        .maybeSingle() as {
+          data: {
+            id: string
+            first_name: string
+            last_name: string
+            age: number | null
+            city: string | null
+            state: string | null
+            hashkafa: string | null
+          } | null
+        }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: girlSingle } = await (supabase.from('singles') as any)
+        .select('id, first_name, last_name, age, city, state, hashkafa')
+        .eq('id', matchRow.girl_id)
+        .maybeSingle() as {
+          data: {
+            id: string
+            first_name: string
+            last_name: string
+            age: number | null
+            city: string | null
+            state: string | null
+            hashkafa: string | null
+          } | null
+        }
+
+      if (boySingle) {
+        setBoy({
+          id: boySingle.id,
+          name: `${boySingle.first_name} ${boySingle.last_name}`.trim(),
+          age: boySingle.age,
+          city: [boySingle.city, boySingle.state].filter(Boolean).join(', ') || '—',
+          hashkafa: boySingle.hashkafa,
+        })
+      }
+
+      if (girlSingle) {
+        setGirl({
+          id: girlSingle.id,
+          name: `${girlSingle.first_name} ${girlSingle.last_name}`.trim(),
+          age: girlSingle.age,
+          city: [girlSingle.city, girlSingle.state].filter(Boolean).join(', ') || '—',
+          hashkafa: girlSingle.hashkafa,
+        })
+      }
+
+      setLoading(false)
+    }
+    load()
+  }, [id])
+
+  async function handleSaveNote() {
+    if (!match) return
+    setNoteSaving(true)
+    setNoteError('')
+    try {
+      const res = await fetch(`/api/matches/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: note }),
+      })
+      if (!res.ok) {
+        const json = await res.json()
+        setNoteError(json.error ?? 'Failed to save note.')
+        return
+      }
+      setMatch((prev) => prev ? { ...prev, message: note } : prev)
+    } catch {
+      setNoteError('Network error. Please try again.')
+    } finally {
+      setNoteSaving(false)
+    }
   }
-  girl: {
-    id: string
-    name: string
-    age: number
-    city: string
-    hashkafa: string
+
+  async function handleStatusSave() {
+    if (!match) return
+    setStatusSaving(true)
+    setStatusError('')
+    try {
+      const res = await fetch(`/api/matches/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (!res.ok) {
+        const json = await res.json()
+        setStatusError(json.error ?? 'Failed to update status.')
+        return
+      }
+      setMatch((prev) => prev ? { ...prev, status: newStatus } : prev)
+      setStatusOpen(false)
+    } catch {
+      setStatusError('Network error. Please try again.')
+    } finally {
+      setStatusSaving(false)
+    }
   }
-  notes: Array<{ id: string; author: string; text: string; date: string }>
-  feedback: Array<{ id: string; from: string; text: string; date: string; sentiment: 'positive' | 'neutral' | 'negative' }>
-  timeline: Array<{ id: string; status: MatchStatus; note: string; date: string }>
-}
 
-const mockMatches: Record<string, MockMatch> = {
-  '1': {
-    id: '1',
-    status: 'current',
-    createdAt: 'April 1, 2026',
-    boy: { id: 'b1', name: 'Yosef Goldstein',   age: 26, city: 'Brooklyn, NY',  hashkafa: 'Modern Orthodox' },
-    girl: { id: 'g1', name: 'Devorah Friedman', age: 23, city: 'Lakewood, NJ',  hashkafa: 'Yeshivish' },
-    notes: [
-      { id: 'n1', author: 'Mrs. Sarah Kessler', text: "Both families are very interested. Yosef's mother spoke with Devorah's mother and they had a very positive conversation.", date: 'Apr 3, 2026' },
-      { id: 'n2', author: 'Mrs. Sarah Kessler', text: 'First phone call scheduled for Thursday evening.', date: 'Apr 5, 2026' },
-    ],
-    feedback: [
-      { id: 'fb1', from: 'Yosef Goldstein', text: 'Had a great first call. She seems warm and thoughtful. Would like to continue.', date: 'Apr 7, 2026', sentiment: 'positive' },
-      { id: 'fb2', from: 'Devorah Friedman', text: 'Enjoyed speaking with him. He is very grounded and kind. Looking forward to meeting in person.', date: 'Apr 7, 2026', sentiment: 'positive' },
-    ],
-    timeline: [
-      { id: 't1', status: 'pending', note: 'Suggestion created', date: 'Apr 1, 2026' },
-      { id: 't2', status: 'current', note: 'Both sides agreed to proceed', date: 'Apr 3, 2026' },
-      { id: 't3', status: 'going_out', note: 'First date scheduled in Manhattan', date: 'Apr 8, 2026' },
-    ],
-  },
-  '2': {
-    id: '2',
-    status: 'going_out',
-    createdAt: 'March 28, 2026',
-    boy: { id: 'b2', name: 'Shmuel Weiss',       age: 28, city: 'Monsey, NY',    hashkafa: 'Yeshivish' },
-    girl: { id: 'g2', name: 'Rivka Blum',        age: 22, city: 'Baltimore, MD', hashkafa: 'Modern Orthodox' },
-    notes: [
-      { id: 'n1', author: 'Mrs. Sarah Kessler', text: 'Families know each other through mutual friends in Monsey.', date: 'Mar 29, 2026' },
-    ],
-    feedback: [
-      { id: 'fb1', from: 'Shmuel Weiss', text: 'First date went well. Would like to go on a second date.', date: 'Apr 2, 2026', sentiment: 'positive' },
-      { id: 'fb2', from: 'Rivka Blum', text: 'Nice, but not sure yet. Need more time to think.', date: 'Apr 2, 2026', sentiment: 'neutral' },
-    ],
-    timeline: [
-      { id: 't1', status: 'pending',   note: 'Suggestion created',          date: 'Mar 28, 2026' },
-      { id: 't2', status: 'current',   note: 'Both sides agreed',           date: 'Mar 30, 2026' },
-      { id: 't3', status: 'going_out', note: 'Currently going on dates',    date: 'Apr 1, 2026' },
-    ],
-  },
-}
-
-function getFallbackMatch(id: string): MockMatch {
-  return {
-    id,
-    status: 'pending',
-    createdAt: 'April 10, 2026',
-    boy:  { id: 'bx', name: 'Moshe Silverstein', age: 27, city: 'Brooklyn, NY',  hashkafa: 'Yeshivish' },
-    girl: { id: 'gx', name: 'Rachel Stern',      age: 24, city: 'Lakewood, NJ',  hashkafa: 'Yeshivish' },
-    notes: [{ id: 'n1', author: 'Mrs. Sarah Kessler', text: 'Initial notes pending.', date: 'Apr 10, 2026' }],
-    feedback: [],
-    timeline: [{ id: 't1', status: 'pending', note: 'Suggestion created', date: 'Apr 10, 2026' }],
+  async function handleMarkAsPast() {
+    if (!match) return
+    setMarkPastLoading(true)
+    try {
+      const res = await fetch(`/api/matches/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'past' }),
+      })
+      if (res.ok) {
+        setMatch((prev) => prev ? { ...prev, status: 'past' } : prev)
+      }
+    } catch { /* ignore */ } finally {
+      setMarkPastLoading(false)
+    }
   }
-}
 
-const sentimentClasses = {
-  positive: 'bg-green-50 border-green-200',
-  neutral:  'bg-gray-50 border-gray-200',
-  negative: 'bg-red-50 border-red-200',
-}
+  if (loading) {
+    return (
+      <AppLayout navItems={navItems} title="Suggestion Detail" role="shadchan">
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+      </AppLayout>
+    )
+  }
 
-
-export default function MatchDetailPage({ params }: { params: { id: string } }) {
-  const match = mockMatches[params.id] ?? getFallbackMatch(params.id)
+  if (!match) {
+    return (
+      <AppLayout navItems={navItems} title="Suggestion Detail" role="shadchan">
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Suggestion not found.</div>
+      </AppLayout>
+    )
+  }
 
   return (
     <AppLayout navItems={navItems} title="Suggestion Detail" role="shadchan">
-      {/* Back link + status row */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <Link
           href="/dashboard/matches"
@@ -133,54 +254,69 @@ export default function MatchDetailPage({ params }: { params: { id: string } }) 
         </Link>
         <div className="flex items-center gap-3">
           <StatusBadge status={match.status} />
-          <div className="relative">
-            <Button variant="secondary" size="sm" className="gap-1.5 text-sm">
-              Update Status
-              <ChevronDown className="h-3.5 w-3.5" />
-            </Button>
-          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5 text-sm"
+            onClick={() => { setNewStatus(match.status); setStatusOpen(true) }}
+          >
+            Update Status
+            <ChevronDown className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </div>
 
       <h2 className="text-xl font-bold text-[#1A1A1A] mb-1">
-        {match.boy.name} &amp; {match.girl.name}
+        {boy?.name ?? '—'} &amp; {girl?.name ?? '—'}
       </h2>
-      <p className="text-sm text-[#888888] mb-6">Created {match.createdAt}</p>
+      <p className="text-sm text-[#888888] mb-6">
+        Created {new Date(match.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+      </p>
 
       {/* Two-column: Boy + Girl cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {/* Boy card */}
         <div className="card">
           <div className="flex items-start gap-4">
-            <Avatar name={match.boy.name} size="lg" />
+            <Avatar name={boy?.name ?? 'B'} size="lg" />
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-[#1A1A1A]">{match.boy.name}</p>
-              <p className="text-sm text-[#555555] mt-0.5">Age {match.boy.age} · {match.boy.city}</p>
-              <p className="text-sm text-[#888888]">{match.boy.hashkafa}</p>
-              <Link
-                href={`/dashboard/singles/${match.boy.id}`}
-                className="inline-flex items-center gap-1 text-xs text-brand-maroon hover:underline mt-2"
-              >
-                View Profile <ExternalLink className="h-3 w-3" />
-              </Link>
+              <p className="font-semibold text-[#1A1A1A]">{boy?.name ?? '—'}</p>
+              {boy && (
+                <>
+                  <p className="text-sm text-[#555555] mt-0.5">
+                    {boy.age ? `Age ${boy.age} · ` : ''}{boy.city}
+                  </p>
+                  <p className="text-sm text-[#888888]">{boy.hashkafa ?? ''}</p>
+                  <Link
+                    href={`/dashboard/singles/${boy.id}`}
+                    className="inline-flex items-center gap-1 text-xs text-brand-maroon hover:underline mt-2"
+                  >
+                    View Profile <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Girl card */}
         <div className="card">
           <div className="flex items-start gap-4">
-            <Avatar name={match.girl.name} size="lg" />
+            <Avatar name={girl?.name ?? 'G'} size="lg" />
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-[#1A1A1A]">{match.girl.name}</p>
-              <p className="text-sm text-[#555555] mt-0.5">Age {match.girl.age} · {match.girl.city}</p>
-              <p className="text-sm text-[#888888]">{match.girl.hashkafa}</p>
-              <Link
-                href={`/dashboard/singles/${match.girl.id}`}
-                className="inline-flex items-center gap-1 text-xs text-brand-maroon hover:underline mt-2"
-              >
-                View Profile <ExternalLink className="h-3 w-3" />
-              </Link>
+              <p className="font-semibold text-[#1A1A1A]">{girl?.name ?? '—'}</p>
+              {girl && (
+                <>
+                  <p className="text-sm text-[#555555] mt-0.5">
+                    {girl.age ? `Age ${girl.age} · ` : ''}{girl.city}
+                  </p>
+                  <p className="text-sm text-[#888888]">{girl.hashkafa ?? ''}</p>
+                  <Link
+                    href={`/dashboard/singles/${girl.id}`}
+                    className="inline-flex items-center gap-1 text-xs text-brand-maroon hover:underline mt-2"
+                  >
+                    View Profile <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -189,41 +325,20 @@ export default function MatchDetailPage({ params }: { params: { id: string } }) 
       {/* Match Notes */}
       <div className="card mb-6">
         <h3 className="font-semibold text-[#1A1A1A] mb-4">Match Notes</h3>
-        <div className="space-y-3 mb-4">
-          {match.notes.map((note) => (
-            <div key={note.id} className="p-3 rounded-lg bg-[#FAFAFA] border border-gray-100">
-              <p className="text-sm text-[#1A1A1A]">{note.text}</p>
-              <p className="text-xs text-[#888888] mt-1">{note.author} · {note.date}</p>
-            </div>
-          ))}
-        </div>
-        <div className="border-t border-gray-100 pt-4">
-          <textarea
-            className="input-base w-full min-h-[80px] resize-none text-sm"
-            placeholder="Add a note..."
-          />
-          <div className="flex justify-end mt-2">
-            <Button size="sm" className="btn-primary">Add Note</Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Match Feedback */}
-      <div className="card mb-6">
-        <h3 className="font-semibold text-[#1A1A1A] mb-4">Match Feedback</h3>
-        {match.feedback.length === 0 ? (
-          <p className="text-sm text-[#888888]">No feedback recorded yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {match.feedback.map((fb) => (
-              <div key={fb.id} className={`p-3 rounded-lg border ${sentimentClasses[fb.sentiment]}`}>
-                <p className="text-sm font-medium text-[#1A1A1A]">{fb.from}</p>
-                <p className="text-sm text-[#555555] mt-1">{fb.text}</p>
-                <p className="text-xs text-[#888888] mt-1">{fb.date}</p>
-              </div>
-            ))}
-          </div>
+        {noteError && (
+          <p className="text-xs text-red-600 mb-2">{noteError}</p>
         )}
+        <textarea
+          className="input-base w-full min-h-[80px] resize-none text-sm"
+          placeholder="Add a note about this suggestion..."
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <div className="flex justify-end mt-2">
+          <Button size="sm" className="btn-primary" onClick={handleSaveNote} disabled={noteSaving}>
+            {noteSaving ? 'Saving…' : 'Save Note'}
+          </Button>
+        </div>
       </div>
 
       {/* Match Timeline */}
@@ -231,27 +346,21 @@ export default function MatchDetailPage({ params }: { params: { id: string } }) 
         <h3 className="font-semibold text-[#1A1A1A] mb-4">Match Timeline</h3>
         <div className="relative">
           <div className="absolute start-3 top-0 bottom-0 w-px bg-gray-200" />
-          <div className="space-y-4">
-            {match.timeline.map((event, idx) => (
-              <div key={event.id} className="flex items-start gap-4 ps-9 relative">
-                <div
-                  className={`absolute start-0 w-7 h-7 rounded-full flex items-center justify-center border-2 ${
-                    idx === match.timeline.length - 1
-                      ? 'bg-brand-maroon border-brand-maroon'
-                      : 'bg-white border-gray-300'
-                  }`}
-                >
-                  <Clock className={`h-3 w-3 ${idx === match.timeline.length - 1 ? 'text-white' : 'text-[#888888]'}`} />
-                </div>
-                <div className="flex-1 pb-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <StatusBadge status={event.status} />
-                    <span className="text-xs text-[#888888]">{event.date}</span>
-                  </div>
-                  <p className="text-sm text-[#555555] mt-0.5">{event.note}</p>
-                </div>
+          <div className="flex items-start gap-4 ps-9 relative">
+            <div className="absolute start-0 w-7 h-7 rounded-full flex items-center justify-center border-2 bg-brand-maroon border-brand-maroon">
+              <Clock className="h-3 w-3 text-white" />
+            </div>
+            <div className="flex-1 pb-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <StatusBadge status={match.status} />
+                <span className="text-xs text-[#888888]">
+                  {new Date(match.created_at).toLocaleDateString('en-US', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                  })}
+                </span>
               </div>
-            ))}
+              <p className="text-sm text-[#555555] mt-0.5">Suggestion created</p>
+            </div>
           </div>
         </div>
       </div>
@@ -265,12 +374,45 @@ export default function MatchDetailPage({ params }: { params: { id: string } }) 
             <p className="text-sm text-[#555555] mt-0.5 mb-3">
               Marking this suggestion as past will close it and archive all related activity.
             </p>
-            <Button variant="secondary" size="sm" className="text-red-600 border-red-300 hover:bg-red-50">
-              Mark as Past
+            <Button
+              variant="secondary"
+              size="sm"
+              className="text-red-600 border-red-300 hover:bg-red-50"
+              onClick={handleMarkAsPast}
+              disabled={markPastLoading || match.status === 'past'}
+            >
+              {markPastLoading ? 'Updating…' : 'Mark as Past'}
             </Button>
           </div>
         </div>
       </div>
+
+      {/* Status Update Dialog */}
+      <Dialog open={statusOpen} onOpenChange={(open) => { if (!open) setStatusOpen(false) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Update Status</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-2 space-y-3">
+            <select
+              className="input-base w-full"
+              value={newStatus}
+              onChange={(e) => setNewStatus(e.target.value as MatchStatus)}
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            {statusError && <p className="text-xs text-red-600">{statusError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setStatusOpen(false)} disabled={statusSaving}>Cancel</Button>
+            <Button onClick={handleStatusSave} disabled={statusSaving}>
+              {statusSaving ? 'Saving…' : 'Save Status'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   )
 }

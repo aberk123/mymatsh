@@ -26,7 +26,7 @@ const navItems: NavItem[] = [
   { label: 'My Singles', href: '/dashboard/singles', icon: Users },
   { label: 'Suggestions', href: '/dashboard/matches', icon: Heart },
   { label: 'Calendar', href: '/dashboard/tasks', icon: CalendarCheck },
-  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, badge: '3' },
+  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare },
   { label: 'Groups', href: '/dashboard/groups', icon: UsersRound },
   { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
 ]
@@ -35,18 +35,20 @@ type Tab = 'profile' | 'availability' | 'references'
 
 const LANGUAGE_OPTIONS = ['English', 'Hebrew', 'Yiddish', 'French', 'Russian', 'Spanish']
 
-const mockOrgs = [
-  { id: 'org1', name: 'Lakewood Shadchanim Association' },
-  { id: 'org2', name: 'National Council of Shadchanim' },
-  { id: 'org3', name: 'Torah Connections Network' },
-  { id: 'org4', name: 'Independent (no org)' },
-]
+interface OrgOption {
+  id: string
+  name: string
+}
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>('profile')
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [orgs, setOrgs] = useState<OrgOption[]>([])
 
-  // Profile tab state — all start blank, populated from auth on mount
+  // Profile tab state
   const [title, setTitle] = useState('Mr.')
   const [fullName, setFullName] = useState('')
   const [city, setCity] = useState('')
@@ -57,7 +59,6 @@ export default function ProfilePage() {
   const [languages, setLanguages] = useState<string[]>([])
   const [yearsExperience, setYearsExperience] = useState('1-2')
   const [shidduchimMade, setShidduchimMade] = useState('1-5')
-  const [typeOfService, setTypeOfService] = useState('')
   const [about, setAbout] = useState('')
 
   // Availability tab state
@@ -76,17 +77,54 @@ export default function ProfilePage() {
   const [organizationId, setOrganizationId] = useState('')
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        const meta = user.user_metadata ?? {}
-        const first = (meta.first_name as string) ?? ''
-        const last = (meta.last_name as string) ?? ''
-        if (first || last) setFullName(`${first} ${last}`.trim())
-        if (user.email) setEmail(user.email)
-        if (user.phone) setPhone(user.phone)
+    async function load() {
+      const supabase = createClient()
+
+      // Load organizations
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: orgRows } = await (supabase.from('organizations') as any)
+        .select('id, name')
+        .eq('is_approved', true)
+        .order('name', { ascending: true }) as { data: OrgOption[] | null }
+      setOrgs(orgRows ?? [])
+
+      // Load shadchan profile via API
+      const res = await fetch('/api/shadchan/profile')
+      if (res.ok) {
+        const { profile } = await res.json() as { profile: Record<string, unknown> | null }
+        if (profile) {
+          setTitle((profile.title as string) ?? 'Mr.')
+          setFullName((profile.full_name as string) ?? '')
+          setCity((profile.city as string) ?? '')
+          setState((profile.state as string) ?? '')
+          setCountry((profile.country as string) ?? '')
+          setPhone((profile.phone as string) ?? '')
+          setEmail((profile.email as string) ?? '')
+          setLanguages((profile.languages as string[]) ?? [])
+          setYearsExperience((profile.years_experience as string) ?? '1-2')
+          setShidduchimMade((profile.shidduchim_made as string) ?? '1-5')
+          setAbout((profile.type_of_service as string) ?? '')
+          setAvailability((profile.availability as string) ?? 'Part Time')
+          setBestContactMethod((profile.best_contact_method as string) ?? 'Email')
+          setSecondBestContactMethod((profile.second_best_contact_method as string) ?? 'Phone')
+          setBestDay((profile.best_day as string) ?? 'Any')
+          setBestTime((profile.best_time as string) ?? 'Any')
+          setAvailableForAdvocacy((profile.available_for_advocacy as boolean) ?? false)
+          setRatesForServices((profile.rates_for_services as string) ?? '')
+          setReference1((profile.reference_1 as string) ?? '')
+          setReference2((profile.reference_2 as string) ?? '')
+          setHidePersonalInfo((profile.hide_personal_info_from_profile as boolean) ?? false)
+          setOrganizationId((profile.organization_id as string) ?? '')
+        } else {
+          // Fall back to auth metadata for email
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user?.email) setEmail(user.email)
+        }
       }
+
       setLoading(false)
-    })
+    }
+    load()
   }, [])
 
   function toggleLanguage(lang: string) {
@@ -95,9 +133,51 @@ export default function ProfilePage() {
     )
   }
 
-  function handleSave() {
-    // TODO: submit to API
-    alert('Profile saved!')
+  async function handleSave() {
+    setSaving(true)
+    setSaveError('')
+    setSaveSuccess(false)
+    try {
+      const res = await fetch('/api/shadchan/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          full_name: fullName,
+          city,
+          state,
+          country,
+          phone,
+          email,
+          languages,
+          years_experience: yearsExperience,
+          shidduchim_made: shidduchimMade,
+          type_of_service: about,
+          availability,
+          best_contact_method: bestContactMethod,
+          second_best_contact_method: secondBestContactMethod,
+          best_day: bestDay,
+          best_time: bestTime,
+          available_for_advocacy: availableForAdvocacy,
+          rates_for_services: ratesForServices,
+          reference_1: reference1,
+          reference_2: reference2,
+          hide_personal_info_from_profile: hidePersonalInfo,
+          organization_id: organizationId || null,
+        }),
+      })
+      if (!res.ok) {
+        const json = await res.json()
+        setSaveError(json.error ?? 'Failed to save. Please try again.')
+        return
+      }
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch {
+      setSaveError('Network error. Please try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const tabs: { id: Tab; label: string }[] = [
@@ -116,7 +196,6 @@ export default function ProfilePage() {
 
   return (
     <AppLayout navItems={navItems} title="My Profile" role="shadchan">
-      {/* Page header */}
       <div className="flex items-start gap-4 mb-6">
         <Avatar name={fullName || 'S'} size="lg" />
         <div>
@@ -127,7 +206,17 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {saveError && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+          {saveError}
+        </div>
+      )}
+      {saveSuccess && (
+        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+          Profile saved successfully.
+        </div>
+      )}
+
       <div className="flex items-center gap-1 bg-white rounded-xl border border-gray-200 p-1 mb-6 w-fit flex-wrap">
         {tabs.map((tab) => (
           <button
@@ -145,7 +234,6 @@ export default function ProfilePage() {
       </div>
 
       <div className="max-w-2xl">
-        {/* Profile Tab */}
         {activeTab === 'profile' && (
           <div className="card space-y-5">
             <h3 className="font-semibold text-[#1A1A1A] flex items-center gap-2">
@@ -153,15 +241,10 @@ export default function ProfilePage() {
               Personal Information
             </h3>
 
-            {/* Title + Full Name */}
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label className="field-label">Title</Label>
-                <select
-                  className="input-base mt-1 w-full"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                >
+                <select className="input-base mt-1 w-full" value={title} onChange={(e) => setTitle(e.target.value)}>
                   <option>Mr.</option>
                   <option>Mrs.</option>
                   <option>Dr.</option>
@@ -171,15 +254,10 @@ export default function ProfilePage() {
               </div>
               <div className="col-span-2">
                 <Label className="field-label">Full Name</Label>
-                <Input
-                  className="input-base mt-1"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                />
+                <Input className="input-base mt-1" value={fullName} onChange={(e) => setFullName(e.target.value)} />
               </div>
             </div>
 
-            {/* City / State / Country */}
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label className="field-label">City</Label>
@@ -195,7 +273,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Phone + Email */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="field-label">Phone</Label>
@@ -207,7 +284,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Languages */}
             <div>
               <Label className="field-label mb-2 block">Languages</Label>
               <div className="flex flex-wrap gap-2">
@@ -225,15 +301,10 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Years Experience + Shidduchim Made */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="field-label">Years Experience</Label>
-                <select
-                  className="input-base mt-1 w-full"
-                  value={yearsExperience}
-                  onChange={(e) => setYearsExperience(e.target.value)}
-                >
+                <select className="input-base mt-1 w-full" value={yearsExperience} onChange={(e) => setYearsExperience(e.target.value)}>
                   <option value="1-2">1–2 years</option>
                   <option value="3-5">3–5 years</option>
                   <option value="6-10">6–10 years</option>
@@ -243,11 +314,7 @@ export default function ProfilePage() {
               </div>
               <div>
                 <Label className="field-label">Shidduchim Made</Label>
-                <select
-                  className="input-base mt-1 w-full"
-                  value={shidduchimMade}
-                  onChange={(e) => setShidduchimMade(e.target.value)}
-                >
+                <select className="input-base mt-1 w-full" value={shidduchimMade} onChange={(e) => setShidduchimMade(e.target.value)}>
                   <option value="1-5">1–5</option>
                   <option value="6-10">6–10</option>
                   <option value="11-20">11–20</option>
@@ -256,18 +323,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Type of Service */}
-            <div>
-              <Label className="field-label">Type of Service</Label>
-              <Textarea
-                className="input-base mt-1 resize-none min-h-[80px]"
-                value={typeOfService}
-                onChange={(e) => setTypeOfService(e.target.value)}
-                placeholder="Describe the type of service you provide..."
-              />
-            </div>
-
-            {/* About bio */}
             <div>
               <Label className="field-label">About / Bio</Label>
               <Textarea
@@ -280,18 +335,13 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Availability & Contact Tab */}
         {activeTab === 'availability' && (
           <div className="card space-y-5">
             <h3 className="font-semibold text-[#1A1A1A]">Availability & Contact Preferences</h3>
 
             <div>
               <Label className="field-label">Availability</Label>
-              <select
-                className="input-base mt-1 w-full"
-                value={availability}
-                onChange={(e) => setAvailability(e.target.value)}
-              >
+              <select className="input-base mt-1 w-full" value={availability} onChange={(e) => setAvailability(e.target.value)}>
                 <option>Full Time</option>
                 <option>Part Time</option>
                 <option>As Needed</option>
@@ -301,11 +351,7 @@ export default function ProfilePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="field-label">Best Contact Method</Label>
-                <select
-                  className="input-base mt-1 w-full"
-                  value={bestContactMethod}
-                  onChange={(e) => setBestContactMethod(e.target.value)}
-                >
+                <select className="input-base mt-1 w-full" value={bestContactMethod} onChange={(e) => setBestContactMethod(e.target.value)}>
                   <option>Email</option>
                   <option>Phone</option>
                   <option>WhatsApp</option>
@@ -314,11 +360,7 @@ export default function ProfilePage() {
               </div>
               <div>
                 <Label className="field-label">Second Best Contact</Label>
-                <select
-                  className="input-base mt-1 w-full"
-                  value={secondBestContactMethod}
-                  onChange={(e) => setSecondBestContactMethod(e.target.value)}
-                >
+                <select className="input-base mt-1 w-full" value={secondBestContactMethod} onChange={(e) => setSecondBestContactMethod(e.target.value)}>
                   <option>Email</option>
                   <option>Phone</option>
                   <option>WhatsApp</option>
@@ -330,11 +372,7 @@ export default function ProfilePage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="field-label">Best Day</Label>
-                <select
-                  className="input-base mt-1 w-full"
-                  value={bestDay}
-                  onChange={(e) => setBestDay(e.target.value)}
-                >
+                <select className="input-base mt-1 w-full" value={bestDay} onChange={(e) => setBestDay(e.target.value)}>
                   <option>Monday</option>
                   <option>Tuesday</option>
                   <option>Wednesday</option>
@@ -347,11 +385,7 @@ export default function ProfilePage() {
               </div>
               <div>
                 <Label className="field-label">Best Time</Label>
-                <select
-                  className="input-base mt-1 w-full"
-                  value={bestTime}
-                  onChange={(e) => setBestTime(e.target.value)}
-                >
+                <select className="input-base mt-1 w-full" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
                   <option>Morning</option>
                   <option>Afternoon</option>
                   <option>Evening</option>
@@ -387,7 +421,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* References & Settings Tab */}
         {activeTab === 'references' && (
           <div className="card space-y-5">
             <h3 className="font-semibold text-[#1A1A1A]">References</h3>
@@ -414,7 +447,6 @@ export default function ProfilePage() {
 
             <div className="border-t border-gray-100 pt-5">
               <h3 className="font-semibold text-[#1A1A1A] mb-4">Settings</h3>
-
               <div className="space-y-4">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -437,7 +469,7 @@ export default function ProfilePage() {
                     onChange={(e) => setOrganizationId(e.target.value)}
                   >
                     <option value="">Select an organization…</option>
-                    {mockOrgs.map((org) => (
+                    {orgs.map((org) => (
                       <option key={org.id} value={org.id}>{org.name}</option>
                     ))}
                   </select>
@@ -447,11 +479,10 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Save button (always visible) */}
         <div className="mt-4 flex justify-end">
-          <Button onClick={handleSave} className="btn-primary gap-2">
+          <Button onClick={handleSave} className="btn-primary gap-2" disabled={saving}>
             <Save className="h-4 w-4" />
-            Save Profile
+            {saving ? 'Saving…' : 'Save Profile'}
           </Button>
         </div>
       </div>

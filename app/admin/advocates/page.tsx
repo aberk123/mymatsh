@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -11,21 +11,24 @@ import {
   DollarSign,
   ClipboardList,
   CheckCircle,
-  Eye,
+  XCircle,
   UsersRound,
   Home,
   BookOpen,
   MessageSquare,
+  Search,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import type { NavItem } from '@/components/ui/sidebar'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { label: 'Users', href: '/admin/users', icon: Users },
-  { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck, badge: '4' },
+  { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck },
   { label: 'Singles', href: '/admin/singles', icon: UsersRound },
   { label: 'Parents', href: '/admin/parents', icon: Home },
   { label: 'Advocates', href: '/admin/advocates', icon: Heart },
@@ -37,47 +40,107 @@ const navItems: NavItem[] = [
   { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
 ]
 
-const pendingAdvocates = [
-  {
-    id: '1',
-    name: 'Tzipora Mandelbaum',
-    city: 'Lakewood, NJ',
-    email: 't.mandelbaum@example.com',
-    languages: ['English', 'Yiddish'],
-    dateApplied: 'Apr 19, 2026',
-  },
-  {
-    id: '2',
-    name: 'Binyamin Schwartz',
-    city: 'Monsey, NY',
-    email: 'b.schwartz@example.com',
-    languages: ['English', 'Hebrew'],
-    dateApplied: 'Apr 16, 2026',
-  },
-]
-
-const allAdvocates = [
-  { id: '3', name: 'Devorah Blum', city: 'Brooklyn, NY', email: 'd.blum@example.com', languages: ['English', 'Yiddish'], approved: true },
-  { id: '4', name: 'Ari Friedman', city: 'Teaneck, NJ', email: 'a.friedman@example.com', languages: ['English'], approved: true },
-  { id: '5', name: 'Shaina Goldberg', city: 'Baltimore, MD', email: 's.goldberg@example.com', languages: ['English', 'Hebrew', 'Russian'], approved: true },
-  { id: '6', name: 'Nachum Peretz', city: 'Chicago, IL', email: 'n.peretz@example.com', languages: ['English', 'Hebrew'], approved: true },
-  { id: '7', name: 'Malka Hirsch', city: 'Passaic, NJ', email: 'm.hirsch@example.com', languages: ['English', 'Yiddish'], approved: false },
-  { id: '8', name: 'Chaim Lichtenstein', city: 'Lawrence, NY', email: 'c.lichten@example.com', languages: ['English'], approved: true },
-  { id: '9', name: 'Esther Birnbaum', city: 'Lakewood, NJ', email: 'e.birnbaum@example.com', languages: ['English', 'Hebrew'], approved: true },
-  { id: '10', name: 'Yankel Moskowitz', city: 'Crown Heights, NY', email: 'y.moskowitz@example.com', languages: ['English', 'Yiddish', 'Russian'], approved: false },
-]
+interface Advocate {
+  id: string
+  user_id: string
+  full_name: string
+  city: string | null
+  email: string | null
+  languages: string[] | null
+  is_approved: boolean
+  created_at: string
+}
 
 export default function AdminAdvocatesPage() {
   const [tab, setTab] = useState<'pending' | 'all'>('pending')
-  const [pendingList, setPendingList] = useState(pendingAdvocates)
+  const [loading, setLoading] = useState(true)
+  const [pendingList, setPendingList] = useState<Advocate[]>([])
+  const [approvedList, setApprovedList] = useState<Advocate[]>([])
+  const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const [search, setSearch] = useState('')
 
-  const handleApprove = (id: string) => {
-    setPendingList((prev) => prev.filter((a) => a.id !== id))
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  async function loadData() {
+    setLoading(true)
+    const supabase = createClient()
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.from('advocates') as any)
+      .select('id, user_id, full_name, city, email, languages, is_approved, created_at')
+      .order('created_at', { ascending: false }) as { data: Advocate[] | null }
+
+    const all = data ?? []
+    setPendingList(all.filter((a) => !a.is_approved))
+    setApprovedList(all.filter((a) => a.is_approved))
+    setLoading(false)
   }
+
+  async function handleApprove(id: string) {
+    setActionLoading(true)
+    setActionError('')
+    try {
+      const res = await fetch(`/api/admin/advocates/${id}/approve`, { method: 'POST' })
+      if (!res.ok) {
+        const json = await res.json()
+        setActionError(json.error ?? 'Approval failed.')
+        return
+      }
+      const advocate = pendingList.find((a) => a.id === id)
+      if (advocate) {
+        setPendingList((prev) => prev.filter((a) => a.id !== id))
+        setApprovedList((prev) => [{ ...advocate, is_approved: true }, ...prev])
+      }
+    } catch {
+      setActionError('Network error. Please try again.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function handleReject(id: string) {
+    setActionLoading(true)
+    setActionError('')
+    try {
+      const res = await fetch(`/api/admin/advocates/${id}/reject`, { method: 'POST' })
+      if (!res.ok) {
+        const json = await res.json()
+        setActionError(json.error ?? 'Rejection failed.')
+        return
+      }
+      setPendingList((prev) => prev.filter((a) => a.id !== id))
+    } catch {
+      setActionError('Network error. Please try again.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const pendingFiltered = pendingList.filter(
+    (a) =>
+      a.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      (a.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (a.city ?? '').toLowerCase().includes(search.toLowerCase())
+  )
+
+  const allFiltered = approvedList.filter(
+    (a) =>
+      a.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      (a.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (a.city ?? '').toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <AppLayout navItems={navItems} title="Advocates" role="platform_admin">
-      {/* Tabs */}
+      {actionError && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
+
       <div className="flex gap-1 border-b border-gray-200 mb-6">
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -88,9 +151,11 @@ export default function AdminAdvocatesPage() {
           onClick={() => setTab('pending')}
         >
           Pending
-          <span className="ml-2 bg-red-100 text-red-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {pendingList.length}
-          </span>
+          {pendingList.length > 0 && (
+            <span className="ml-2 bg-red-100 text-red-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
+              {pendingList.length}
+            </span>
+          )}
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -102,13 +167,25 @@ export default function AdminAdvocatesPage() {
         >
           All Advocates
           <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {allAdvocates.length}
+            {approvedList.length}
           </span>
         </button>
       </div>
 
       <div className="card">
-        {tab === 'pending' ? (
+        <div className="relative mb-4 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#888888]" />
+          <Input
+            placeholder="Search advocates..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-[#888888] text-sm">Loading…</div>
+        ) : tab === 'pending' ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -122,33 +199,44 @@ export default function AdminAdvocatesPage() {
                 </tr>
               </thead>
               <tbody>
-                {pendingList.map((a) => (
+                {pendingFiltered.map((a) => (
                   <tr key={a.id} className="table-row">
-                    <td className="table-td font-medium text-[#1A1A1A]">{a.name}</td>
-                    <td className="table-td text-[#555555]">{a.city}</td>
-                    <td className="table-td text-[#555555]">{a.email}</td>
-                    <td className="table-td text-[#555555]">{a.languages.join(', ')}</td>
-                    <td className="table-td text-[#555555]">{a.dateApplied}</td>
+                    <td className="table-td font-medium text-[#1A1A1A]">{a.full_name}</td>
+                    <td className="table-td text-[#555555]">{a.city ?? '—'}</td>
+                    <td className="table-td text-[#555555]">{a.email ?? '—'}</td>
+                    <td className="table-td text-[#555555]">{(a.languages ?? []).join(', ') || '—'}</td>
+                    <td className="table-td text-[#555555]">
+                      {new Date(a.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}
+                    </td>
                     <td className="table-td">
                       <div className="flex items-center gap-2">
                         <Button
                           variant="primary"
                           size="sm"
                           className="gap-1"
+                          disabled={actionLoading}
                           onClick={() => handleApprove(a.id)}
                         >
                           <CheckCircle className="h-3.5 w-3.5" />
                           Approve
                         </Button>
-                        <Button variant="ghost" size="sm" className="gap-1">
-                          <Eye className="h-3.5 w-3.5" />
-                          View
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          className="gap-1"
+                          disabled={actionLoading}
+                          onClick={() => handleReject(a.id)}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Reject
                         </Button>
                       </div>
                     </td>
                   </tr>
                 ))}
-                {pendingList.length === 0 && (
+                {pendingFiltered.length === 0 && (
                   <tr>
                     <td colSpan={6} className="table-td text-center text-[#888888] py-8">
                       No pending advocates.
@@ -168,27 +256,25 @@ export default function AdminAdvocatesPage() {
                   <th className="table-th">Email</th>
                   <th className="table-th">Languages</th>
                   <th className="table-th">Status</th>
-                  <th className="table-th">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {allAdvocates.map((a) => (
+                {allFiltered.map((a) => (
                   <tr key={a.id} className="table-row">
-                    <td className="table-td font-medium text-[#1A1A1A]">{a.name}</td>
-                    <td className="table-td text-[#555555]">{a.city}</td>
-                    <td className="table-td text-[#555555]">{a.email}</td>
-                    <td className="table-td text-[#555555]">{a.languages.join(', ')}</td>
-                    <td className="table-td">
-                      <StatusBadge status={a.approved ? 'active' : 'pending'} />
-                    </td>
-                    <td className="table-td">
-                      <Button variant="ghost" size="sm" className="gap-1">
-                        <Eye className="h-3.5 w-3.5" />
-                        View
-                      </Button>
-                    </td>
+                    <td className="table-td font-medium text-[#1A1A1A]">{a.full_name}</td>
+                    <td className="table-td text-[#555555]">{a.city ?? '—'}</td>
+                    <td className="table-td text-[#555555]">{a.email ?? '—'}</td>
+                    <td className="table-td text-[#555555]">{(a.languages ?? []).join(', ') || '—'}</td>
+                    <td className="table-td"><StatusBadge status="active" /></td>
                   </tr>
                 ))}
+                {allFiltered.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="table-td text-center text-[#888888] py-8">
+                      No approved advocates yet.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

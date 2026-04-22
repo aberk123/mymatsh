@@ -1,73 +1,124 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   Users,
   MessageSquare,
-  Eye,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { NavItem } from '@/components/ui/sidebar'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/portal/advocate', icon: LayoutDashboard },
   { label: 'My Singles', href: '/portal/advocate/singles', icon: Users },
-  { label: 'Messages', href: '/portal/advocate/messages', icon: MessageSquare, badge: '3' },
+  { label: 'Messages', href: '/portal/advocate/messages', icon: MessageSquare },
 ]
 
-const mockSingles = [
-  {
-    id: '1',
-    name: 'Devorah Levy',
-    age: 25,
-    city: 'Lakewood, NJ',
-    status: 'available',
-    shadchan: 'Rabbi Sternberg',
-    activeSuggestions: 3,
-  },
-  {
-    id: '2',
-    name: 'Rivka Blum',
-    age: 22,
-    city: 'Baltimore, MD',
-    status: 'available',
-    shadchan: 'Mrs. Goldberg',
-    activeSuggestions: 1,
-  },
-  {
-    id: '3',
-    name: 'Chana Weinstein',
-    age: 24,
-    city: 'Monsey, NY',
-    status: 'on_hold',
-    shadchan: 'Rabbi Sternberg',
-    activeSuggestions: 0,
-  },
-  {
-    id: '4',
-    name: 'Miriam Fischer',
-    age: 23,
-    city: 'Chicago, IL',
-    status: 'available',
-    shadchan: 'Mrs. Feldman',
-    activeSuggestions: 2,
-  },
-  {
-    id: '5',
-    name: 'Leah Schwartz',
-    age: 26,
-    city: 'Brooklyn, NY',
-    status: 'draft',
-    shadchan: 'Mrs. Goldberg',
-    activeSuggestions: 0,
-  },
-]
+interface SingleRow {
+  id: string
+  name: string
+  age: number | null
+  city: string
+  status: string
+  shadchanName: string
+  activeSuggestions: number
+}
 
 export default function AdvocateSinglesPage() {
+  const [loading, setLoading] = useState(true)
+  const [singles, setSingles] = useState<SingleRow[]>([])
+
+  useEffect(() => {
+    const supabase = createClient()
+
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoading(false); return }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: advocate } = await (supabase.from('advocates') as any)
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle() as { data: { id: string } | null }
+
+      if (!advocate) { setLoading(false); return }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: requests } = await (supabase.from('advocate_requests') as any)
+        .select('single_id')
+        .eq('advocate_id', advocate.id)
+        .eq('status', 'active') as { data: Array<{ single_id: string }> | null }
+
+      const singleIds = (requests ?? []).map((r) => r.single_id)
+
+      if (singleIds.length === 0) { setLoading(false); return }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: singlesData } = await (supabase.from('singles') as any)
+        .select('id, first_name, last_name, age, city, state, status, created_by_shadchan_id')
+        .in('id', singleIds) as {
+          data: Array<{
+            id: string
+            first_name: string
+            last_name: string
+            age: number | null
+            city: string | null
+            state: string | null
+            status: string
+            created_by_shadchan_id: string
+          }> | null
+        }
+
+      if (!singlesData || singlesData.length === 0) { setLoading(false); return }
+
+      const shadchanIds = Array.from(new Set(singlesData.map((s) => s.created_by_shadchan_id)))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profiles } = await (supabase.from('shadchan_profiles') as any)
+        .select('id, full_name')
+        .in('id', shadchanIds) as { data: Array<{ id: string; full_name: string }> | null }
+
+      const nameMap = Object.fromEntries((profiles ?? []).map((p) => [p.id, p.full_name]))
+
+      // Count active matches for each single
+      const rows: SingleRow[] = []
+      for (const s of singlesData) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { count } = await (supabase.from('matches') as any)
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['pending', 'current', 'going_out'])
+          .or(`boy_id.eq.${s.id},girl_id.eq.${s.id}`) as { count: number | null }
+
+        rows.push({
+          id: s.id,
+          name: `${s.first_name} ${s.last_name}`.trim(),
+          age: s.age,
+          city: [s.city, s.state].filter(Boolean).join(', ') || '',
+          status: s.status,
+          shadchanName: nameMap[s.created_by_shadchan_id] ?? '—',
+          activeSuggestions: count ?? 0,
+        })
+      }
+
+      setSingles(rows)
+      setLoading(false)
+    }
+
+    load()
+  }, [])
+
+  if (loading) {
+    return (
+      <AppLayout navItems={navItems} title="My Singles" role="advocate">
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+      </AppLayout>
+    )
+  }
+
   return (
     <AppLayout navItems={navItems} title="My Singles" role="advocate">
       <div className="mb-6">
@@ -77,7 +128,7 @@ export default function AdvocateSinglesPage() {
         </p>
       </div>
 
-      {mockSingles.length === 0 ? (
+      {singles.length === 0 ? (
         <EmptyState message="You are not currently advocating for any singles." />
       ) : (
         <div className="card p-0 overflow-hidden">
@@ -91,11 +142,10 @@ export default function AdvocateSinglesPage() {
                   <th className="table-th">Status</th>
                   <th className="table-th">Shadchan</th>
                   <th className="table-th text-center">Active Suggestions</th>
-                  <th className="table-th text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {mockSingles.map((single) => (
+                {singles.map((single) => (
                   <tr key={single.id} className="table-row">
                     <td className="table-td">
                       <div className="flex items-center gap-2.5">
@@ -103,12 +153,12 @@ export default function AdvocateSinglesPage() {
                         <span className="font-medium text-[#1A1A1A]">{single.name}</span>
                       </div>
                     </td>
-                    <td className="table-td text-[#555555]">{single.age}</td>
-                    <td className="table-td text-[#555555]">{single.city}</td>
+                    <td className="table-td text-[#555555]">{single.age ?? '—'}</td>
+                    <td className="table-td text-[#555555]">{single.city || '—'}</td>
                     <td className="table-td">
                       <StatusBadge status={single.status} />
                     </td>
-                    <td className="table-td text-[#555555]">{single.shadchan}</td>
+                    <td className="table-td text-[#555555]">{single.shadchanName}</td>
                     <td className="table-td text-center">
                       {single.activeSuggestions > 0 ? (
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-brand-maroon text-white text-xs font-bold">
@@ -117,11 +167,6 @@ export default function AdvocateSinglesPage() {
                       ) : (
                         <span className="text-[#888888]">—</span>
                       )}
-                    </td>
-                    <td className="table-td text-center">
-                      <Button variant="ghost" size="icon" className="h-7 w-7 mx-auto">
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
                     </td>
                   </tr>
                 ))}

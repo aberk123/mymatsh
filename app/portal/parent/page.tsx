@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   LayoutDashboard,
@@ -15,50 +16,155 @@ import { WelcomeBanner } from '@/components/ui/welcome-banner'
 import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
+import { EmptyState } from '@/components/ui/empty-state'
 import type { NavItem } from '@/components/ui/sidebar'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/portal/parent', icon: LayoutDashboard },
   { label: 'My Child', href: '/portal/parent/child', icon: UserCircle },
   { label: 'Suggestions', href: '/portal/parent/matches', icon: Heart },
-  { label: 'Messages', href: '/portal/parent/messages', icon: MessageSquare, badge: '1' },
+  { label: 'Messages', href: '/portal/parent/messages', icon: MessageSquare },
 ]
 
-const mockSuggestions = [
-  {
-    id: '1',
-    status: 'pending',
-    shadchanName: 'Rabbi Sternberg',
-    date: 'Apr 18, 2026',
-  },
-  {
-    id: '2',
-    status: 'current',
-    shadchanName: 'Mrs. Goldberg',
-    date: 'Apr 10, 2026',
-  },
-]
+interface MatchSummary {
+  id: string
+  status: string
+  created_at: string
+}
 
-const recentMessages = [
-  {
-    id: '1',
-    from: 'Rabbi Sternberg',
-    body: "Shalom! I wanted to update you on the suggestion for Devorah. Things are progressing well.",
-    time: 'Today, 2:14 PM',
-  },
-  {
-    id: '2',
-    from: 'Mrs. Goldberg',
-    body: "Good afternoon! I have some exciting news regarding the current suggestion.",
-    time: 'Yesterday',
-  },
-]
+interface MessageSummary {
+  id: string
+  from_user_id: string
+  body: string
+  created_at: string
+  senderName: string
+}
 
 export default function ParentDashboardPage() {
+  const [loading, setLoading] = useState(true)
+  const [parentName, setParentName] = useState('')
+  const [childName, setChildName] = useState('')
+  const [childAge, setChildAge] = useState<number | null>(null)
+  const [childCity, setChildCity] = useState('')
+  const [childStatus, setChildStatus] = useState('')
+  const [pledgeAmount, setPledgeAmount] = useState<number | null>(null)
+  const [pledgeConfirmedAt, setPledgeConfirmedAt] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<MatchSummary[]>([])
+  const [recentMessages, setRecentMessages] = useState<MessageSummary[]>([])
+
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoading(false); return }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: parent } = await (supabase.from('parents') as any)
+        .select('id, full_name, child_id, pledge_amount, pledge_confirmed_at')
+        .eq('user_id', user.id)
+        .maybeSingle() as {
+          data: {
+            id: string
+            full_name: string
+            child_id: string
+            pledge_amount: number | null
+            pledge_confirmed_at: string | null
+          } | null
+        }
+
+      if (!parent) { setLoading(false); return }
+
+      setParentName(parent.full_name)
+      setPledgeAmount(parent.pledge_amount)
+      setPledgeConfirmedAt(parent.pledge_confirmed_at)
+
+      // Load child's singles record
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: child } = await (supabase.from('singles') as any)
+        .select('first_name, last_name, age, city, state, status')
+        .eq('id', parent.child_id)
+        .maybeSingle() as {
+          data: {
+            first_name: string
+            last_name: string
+            age: number | null
+            city: string | null
+            state: string | null
+            status: string
+          } | null
+        }
+
+      if (child) {
+        setChildName(`${child.first_name} ${child.last_name}`.trim())
+        setChildAge(child.age)
+        setChildCity([child.city, child.state].filter(Boolean).join(', ') || '')
+        setChildStatus(child.status)
+      }
+
+      // Load suggestions
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: matches } = await (supabase.from('matches') as any)
+        .select('id, status, created_at')
+        .or(`boy_id.eq.${parent.child_id},girl_id.eq.${parent.child_id}`)
+        .not('status', 'in', '("past","married","engaged")')
+        .order('created_at', { ascending: false })
+        .limit(3) as { data: MatchSummary[] | null }
+
+      setSuggestions(matches ?? [])
+
+      // Load recent messages
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: msgs } = await (supabase.from('messages') as any)
+        .select('id, from_user_id, body, created_at')
+        .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+        .order('created_at', { ascending: false })
+        .limit(3) as { data: Array<{ id: string; from_user_id: string; body: string; created_at: string }> | null }
+
+      if (msgs && msgs.length > 0) {
+        const senderIds = Array.from(new Set(msgs.map((m) => m.from_user_id).filter((id) => id !== user.id)))
+        const nameMap: Record<string, string> = {}
+
+        for (const sid of senderIds) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: sp } = await (supabase.from('shadchan_profiles') as any)
+            .select('full_name')
+            .eq('user_id', sid)
+            .maybeSingle() as { data: { full_name: string } | null }
+          if (sp) nameMap[sid] = sp.full_name
+        }
+
+        setRecentMessages(msgs.map((m) => ({
+          ...m,
+          senderName: m.from_user_id === user.id ? 'You' : (nameMap[m.from_user_id] ?? 'Unknown'),
+        })))
+      }
+
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  if (loading) {
+    return (
+      <AppLayout navItems={navItems} title="Parent Dashboard" role="parent">
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+      </AppLayout>
+    )
+  }
+
+  if (!parentName) {
+    return (
+      <AppLayout navItems={navItems} title="Parent Dashboard" role="parent">
+        <EmptyState message="Parent profile not found. Please contact support." />
+      </AppLayout>
+    )
+  }
+
   return (
     <AppLayout navItems={navItems} title="Parent Dashboard" role="parent">
       <WelcomeBanner
-        greeting="Shalom, Mr. & Mrs. Cohen"
+        greeting={`Shalom, ${parentName}`}
         subtitle="Stay updated on your child's shidduch process."
         steps={[
           { number: 1, label: 'Review Profile' },
@@ -78,16 +184,26 @@ export default function ParentDashboardPage() {
               </Button>
             </Link>
           </div>
-          <div className="flex flex-col items-center gap-3 py-2">
-            <Avatar name="Devorah Cohen" size="lg" />
-            <div className="text-center">
-              <p className="font-semibold text-[#1A1A1A]">Devorah Cohen</p>
-              <p className="text-sm text-[#555555]">Age 25 · Lakewood, NJ</p>
-              <div className="mt-2 flex justify-center">
-                <StatusBadge status="available" />
+          {childName ? (
+            <div className="flex flex-col items-center gap-3 py-2">
+              <Avatar name={childName} size="lg" />
+              <div className="text-center">
+                <p className="font-semibold text-[#1A1A1A]">{childName}</p>
+                <p className="text-sm text-[#555555]">
+                  {childAge ? `Age ${childAge}` : ''}
+                  {childAge && childCity ? ' · ' : ''}
+                  {childCity}
+                </p>
+                {childStatus && (
+                  <div className="mt-2 flex justify-center">
+                    <StatusBadge status={childStatus} />
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          ) : (
+            <p className="text-sm text-[#888888] text-center py-4">No child profile found.</p>
+          )}
           <Link href="/portal/parent/child">
             <Button variant="outline-maroon" size="sm" className="w-full">
               View Full Profile
@@ -105,19 +221,23 @@ export default function ParentDashboardPage() {
               </Button>
             </Link>
           </div>
-          <div className="space-y-3">
-            {mockSuggestions.map((s) => (
-              <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg bg-[#FAFAFA] border border-gray-100">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#1A1A1A]">Suggestion #{s.id}</p>
-                  <p className="text-xs text-[#888888] mt-0.5">
-                    Via {s.shadchanName} · {s.date}
-                  </p>
+          {suggestions.length === 0 ? (
+            <p className="text-sm text-[#888888] text-center py-4">No active suggestions yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {suggestions.map((s, idx) => (
+                <div key={s.id} className="flex items-center gap-3 p-3 rounded-lg bg-[#FAFAFA] border border-gray-100">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#1A1A1A]">Suggestion #{idx + 1}</p>
+                    <p className="text-xs text-[#888888] mt-0.5">
+                      {new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  </div>
+                  <StatusBadge status={s.status} />
                 </div>
-                <StatusBadge status={s.status} />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Pledge */}
@@ -128,14 +248,28 @@ export default function ParentDashboardPage() {
             </div>
             <h3 className="font-semibold text-[#1A1A1A]">Pledge Amount</h3>
           </div>
-          <div>
-            <p className="text-3xl font-bold text-[#1A1A1A]">$3,600</p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <CheckCircle className="h-4 w-4 text-green-500" />
-              <span className="text-sm text-green-600 font-medium">Confirmed</span>
+          {pledgeAmount ? (
+            <div>
+              <p className="text-3xl font-bold text-[#1A1A1A]">
+                ${pledgeAmount.toLocaleString()}
+              </p>
+              {pledgeConfirmedAt && (
+                <>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span className="text-sm text-green-600 font-medium">Confirmed</span>
+                  </div>
+                  <p className="text-xs text-[#888888] mt-0.5">
+                    Confirmed on {new Date(pledgeConfirmedAt).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric',
+                    })}
+                  </p>
+                </>
+              )}
             </div>
-            <p className="text-xs text-[#888888] mt-0.5">Confirmed on Apr 1, 2026</p>
-          </div>
+          ) : (
+            <p className="text-sm text-[#888888]">No pledge on file.</p>
+          )}
           <p className="text-xs text-[#888888] border-t border-gray-100 pt-3">
             Your pledge supports your child&apos;s shidduch process. Thank you for your commitment.
           </p>
@@ -152,20 +286,26 @@ export default function ParentDashboardPage() {
             </Button>
           </Link>
         </div>
-        <div className="space-y-3">
-          {recentMessages.map((msg) => (
-            <div key={msg.id} className="flex items-start gap-3 p-3 rounded-lg bg-[#FAFAFA] border border-gray-100">
-              <Avatar name={msg.from} size="sm" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-[#1A1A1A]">{msg.from}</p>
-                  <span className="text-xs text-[#888888] flex-shrink-0">{msg.time}</span>
+        {recentMessages.length === 0 ? (
+          <p className="text-sm text-[#888888] text-center py-4">No messages yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {recentMessages.map((msg) => (
+              <div key={msg.id} className="flex items-start gap-3 p-3 rounded-lg bg-[#FAFAFA] border border-gray-100">
+                <Avatar name={msg.senderName} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[#1A1A1A]">{msg.senderName}</p>
+                    <span className="text-xs text-[#888888] flex-shrink-0">
+                      {new Date(msg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                  <p className="text-sm text-[#555555] mt-0.5 line-clamp-2">{msg.body}</p>
                 </div>
-                <p className="text-sm text-[#555555] mt-0.5 line-clamp-2">{msg.body}</p>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </AppLayout>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -21,13 +21,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { NavItem } from '@/components/ui/sidebar'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'My Singles', href: '/dashboard/singles', icon: Users },
   { label: 'Suggestions', href: '/dashboard/matches', icon: Heart },
   { label: 'Calendar', href: '/dashboard/tasks', icon: CalendarCheck },
-  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, badge: '3' },
+  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare },
   { label: 'Groups', href: '/dashboard/groups', icon: UsersRound },
   { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
 ]
@@ -40,34 +41,20 @@ interface SingleOption {
   hashkafa: string
 }
 
-const maleSingles: SingleOption[] = [
-  { id: 'm1', name: 'Yosef Goldstein',   age: 26, city: 'Brooklyn, NY',   hashkafa: 'Modern Orthodox' },
-  { id: 'm2', name: 'Shmuel Weiss',      age: 28, city: 'Monsey, NY',     hashkafa: 'Yeshivish' },
-  { id: 'm3', name: 'Menachem Katz',     age: 25, city: 'Chicago, IL',    hashkafa: 'Yeshivish' },
-  { id: 'm4', name: 'Dovid Bernstein',   age: 30, city: 'Lakewood, NJ',   hashkafa: 'Chassidish' },
-  { id: 'm5', name: 'Aryeh Rosenblatt',  age: 27, city: 'Baltimore, MD',  hashkafa: 'Modern Orthodox' },
-]
-
-const femaleSingles: SingleOption[] = [
-  { id: 'f1', name: 'Devorah Friedman',  age: 23, city: 'Lakewood, NJ',   hashkafa: 'Yeshivish' },
-  { id: 'f2', name: 'Rivka Blum',        age: 22, city: 'Baltimore, MD',  hashkafa: 'Modern Orthodox' },
-  { id: 'f3', name: 'Leah Shapiro',      age: 24, city: 'Brooklyn, NY',   hashkafa: 'Yeshivish' },
-  { id: 'f4', name: 'Chana Levine',      age: 21, city: 'Passaic, NJ',    hashkafa: 'Chassidish' },
-  { id: 'f5', name: 'Miriam Cohen',      age: 25, city: 'Chicago, IL',    hashkafa: 'Modern Orthodox' },
-]
-
 function SingleSearchField({
   label,
   options,
   selected,
   onSelect,
   onClear,
+  disabled,
 }: {
   label: string
   options: SingleOption[]
   selected: SingleOption | null
   onSelect: (s: SingleOption) => void
   onClear: () => void
+  disabled?: boolean
 }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -97,6 +84,7 @@ function SingleSearchField({
               className="input-base ps-9"
               placeholder={`Search ${label.toLowerCase()}...`}
               value={query}
+              disabled={disabled}
               onChange={(e) => {
                 setQuery(e.target.value)
                 setOpen(true)
@@ -136,21 +124,94 @@ function SingleSearchField({
 
 export default function NewMatchPage() {
   const router = useRouter()
+  const [maleSingles, setMaleSingles] = useState<SingleOption[]>([])
+  const [femaleSingles, setFemaleSingles] = useState<SingleOption[]>([])
+  const [loadingSingles, setLoadingSingles] = useState(true)
   const [selectedBoy, setSelectedBoy] = useState<SingleOption | null>(null)
   const [selectedGirl, setSelectedGirl] = useState<SingleOption | null>(null)
   const [notes, setNotes] = useState('')
-  const [suggestedBy, setSuggestedBy] = useState('Mrs. Sarah Kessler')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoadingSingles(false); return }
+
+      // Get shadchan profile ID
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profile } = await (supabase.from('shadchan_profiles') as any)
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle() as { data: { id: string } | null }
+
+      if (!profile) { setLoadingSingles(false); return }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: singles } = await (supabase.from('singles') as any)
+        .select('id, first_name, last_name, age, city, state, hashkafa, gender')
+        .eq('created_by_shadchan_id', profile.id)
+        .in('status', ['available', 'draft'])
+        .order('first_name', { ascending: true }) as {
+          data: Array<{
+            id: string
+            first_name: string
+            last_name: string
+            age: number | null
+            city: string | null
+            state: string | null
+            hashkafa: string | null
+            gender: string
+          }> | null
+        }
+
+      const mapped = (singles ?? []).map((s) => ({
+        id: s.id,
+        name: `${s.first_name} ${s.last_name}`.trim(),
+        age: s.age ?? 0,
+        city: [s.city, s.state].filter(Boolean).join(', ') || '—',
+        hashkafa: s.hashkafa ?? '—',
+        gender: s.gender,
+      }))
+
+      setMaleSingles(mapped.filter((s) => s.gender === 'male'))
+      setFemaleSingles(mapped.filter((s) => s.gender === 'female'))
+      setLoadingSingles(false)
+    }
+    load()
+  }, [])
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedBoy || !selectedGirl) return
-    // In production, submit to API here
-    router.push('/dashboard/matches')
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      const res = await fetch('/api/matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          boy_id: selectedBoy.id,
+          girl_id: selectedGirl.id,
+          notes: notes.trim() || undefined,
+        }),
+      })
+      if (!res.ok) {
+        const json = await res.json()
+        setSubmitError(json.error ?? 'Failed to create suggestion.')
+        return
+      }
+      router.push('/dashboard/matches')
+    } catch {
+      setSubmitError('Network error. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <AppLayout navItems={navItems} title="New Suggestion" role="shadchan">
-      {/* Back link */}
       <div className="mb-6">
         <Link
           href="/dashboard/matches"
@@ -165,9 +226,14 @@ export default function NewMatchPage() {
         <h2 className="text-2xl font-bold text-[#1A1A1A] mb-1">New Suggestion</h2>
         <p className="text-sm text-[#555555] mb-6">Create a new shidduch suggestion by selecting a boy and girl from your singles.</p>
 
+        {submitError && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            {submitError}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
           <div className="card space-y-6">
-            {/* Select Boy */}
             <div>
               <h3 className="text-sm font-semibold text-[#1A1A1A] mb-3 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">B</span>
@@ -179,10 +245,10 @@ export default function NewMatchPage() {
                 selected={selectedBoy}
                 onSelect={setSelectedBoy}
                 onClear={() => setSelectedBoy(null)}
+                disabled={loadingSingles}
               />
             </div>
 
-            {/* Select Girl */}
             <div>
               <h3 className="text-sm font-semibold text-[#1A1A1A] mb-3 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-700 text-xs font-bold flex items-center justify-center">G</span>
@@ -194,22 +260,10 @@ export default function NewMatchPage() {
                 selected={selectedGirl}
                 onSelect={setSelectedGirl}
                 onClear={() => setSelectedGirl(null)}
+                disabled={loadingSingles}
               />
             </div>
 
-            {/* Suggested By */}
-            <div>
-              <Label htmlFor="suggestedBy" className="field-label">Suggested By</Label>
-              <Input
-                id="suggestedBy"
-                className="input-base mt-1"
-                value={suggestedBy}
-                onChange={(e) => setSuggestedBy(e.target.value)}
-                placeholder="Your name"
-              />
-            </div>
-
-            {/* Notes */}
             <div>
               <Label htmlFor="notes" className="field-label">Notes</Label>
               <Textarea
@@ -221,19 +275,16 @@ export default function NewMatchPage() {
               />
             </div>
 
-            {/* Submit */}
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
               <Link href="/dashboard/matches">
-                <Button type="button" variant="secondary">
-                  Cancel
-                </Button>
+                <Button type="button" variant="secondary">Cancel</Button>
               </Link>
               <Button
                 type="submit"
                 className="btn-primary"
-                disabled={!selectedBoy || !selectedGirl}
+                disabled={!selectedBoy || !selectedGirl || submitting}
               >
-                Create Suggestion
+                {submitting ? 'Creating…' : 'Create Suggestion'}
               </Button>
             </div>
           </div>

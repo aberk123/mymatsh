@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import {
   LayoutDashboard,
@@ -77,7 +78,10 @@ type FormValues = {
 }
 
 export default function NewSinglePage() {
+  const router = useRouter()
   const [currentStep, setCurrentStep] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const {
     register,
@@ -96,9 +100,33 @@ export default function NewSinglePage() {
     },
   })
 
-  const onSubmit = (data: FormValues) => {
+  const onSubmit = async (data: FormValues) => {
+    setSaving(true)
+    setSaveError('')
     const heightInches = data.height_feet * 12 + data.height_inches_rem
-    console.log('New single submitted:', { ...data, height_inches: heightInches })
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { height_feet, height_inches_rem, privacy_show_photo, privacy_show_contact, ...rest } = data
+    try {
+      const res = await fetch('/api/singles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...rest,
+          height_inches: heightInches,
+          privacy_settings: { show_photo: privacy_show_photo, show_contact: privacy_show_contact },
+        }),
+      })
+      if (!res.ok) {
+        const json = await res.json()
+        setSaveError(json.error ?? 'Failed to save. Please try again.')
+        return
+      }
+      router.push('/dashboard/singles')
+    } catch {
+      setSaveError('Network error. Please try again.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const next = () => setCurrentStep((s) => Math.min(s + 1, wizardSteps.length - 1))
@@ -121,6 +149,12 @@ export default function NewSinglePage() {
           <h1 className="text-xl font-semibold text-[#1A1A1A]">Add New Single</h1>
           <p className="text-sm text-[#555555] mt-1">Complete all steps to create a full profile.</p>
         </div>
+
+        {saveError && (
+          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            {saveError}
+          </div>
+        )}
 
         {/* Wizard Progress */}
         <div className="card p-0 overflow-hidden">
@@ -472,8 +506,8 @@ export default function NewSinglePage() {
                   Next
                 </Button>
               ) : (
-                <Button type="submit" variant="pink">
-                  Save Single
+                <Button type="submit" variant="pink" disabled={saving}>
+                  {saving ? 'Saving…' : 'Save Single'}
                 </Button>
               )}
             </div>
