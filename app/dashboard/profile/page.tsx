@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Avatar } from '@/components/ui/avatar'
 import type { NavItem } from '@/components/ui/sidebar'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -43,35 +44,50 @@ const mockOrgs = [
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>('profile')
+  const [loading, setLoading] = useState(true)
 
-  // Profile tab state
-  const [title, setTitle] = useState('Mrs.')
-  const [fullName, setFullName] = useState('Sarah Kessler')
-  const [city, setCity] = useState('Brooklyn')
-  const [state, setState] = useState('NY')
-  const [country, setCountry] = useState('USA')
-  const [phone, setPhone] = useState('(718) 555-0192')
-  const [email, setEmail] = useState('sarah@kesslershidduchim.com')
-  const [languages, setLanguages] = useState<string[]>(['English', 'Hebrew'])
-  const [yearsExperience, setYearsExperience] = useState('6-10')
-  const [shidduchimMade, setShidduchimMade] = useState('11-20')
-  const [typeOfService, setTypeOfService] = useState('I specialize in Yeshivish and Modern Orthodox singles ages 20-35.')
-  const [about, setAbout] = useState("I have been a shadchan for over 12 years with a deep commitment to each single I represent. I take time to understand each person's values and goals before making any suggestion.")
+  // Profile tab state — all start blank, populated from auth on mount
+  const [title, setTitle] = useState('Mr.')
+  const [fullName, setFullName] = useState('')
+  const [city, setCity] = useState('')
+  const [state, setState] = useState('')
+  const [country, setCountry] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [languages, setLanguages] = useState<string[]>([])
+  const [yearsExperience, setYearsExperience] = useState('1-2')
+  const [shidduchimMade, setShidduchimMade] = useState('1-5')
+  const [typeOfService, setTypeOfService] = useState('')
+  const [about, setAbout] = useState('')
 
   // Availability tab state
   const [availability, setAvailability] = useState('Part Time')
-  const [bestContactMethod, setBestContactMethod] = useState('Phone')
-  const [secondBestContactMethod, setSecondBestContactMethod] = useState('WhatsApp')
-  const [bestDay, setBestDay] = useState('Weekdays')
-  const [bestTime, setBestTime] = useState('Evening')
-  const [availableForAdvocacy, setAvailableForAdvocacy] = useState(true)
-  const [ratesForServices, setRatesForServices] = useState('I do not charge for my services. Donations are welcome and appreciated.')
+  const [bestContactMethod, setBestContactMethod] = useState('Email')
+  const [secondBestContactMethod, setSecondBestContactMethod] = useState('Phone')
+  const [bestDay, setBestDay] = useState('Any')
+  const [bestTime, setBestTime] = useState('Any')
+  const [availableForAdvocacy, setAvailableForAdvocacy] = useState(false)
+  const [ratesForServices, setRatesForServices] = useState('')
 
   // References & Settings tab state
-  const [reference1, setReference1] = useState('Rabbi Yitzchok Feldman — (718) 555-0143')
-  const [reference2, setReference2] = useState('Mrs. Chana Horowitz — (732) 555-0211')
+  const [reference1, setReference1] = useState('')
+  const [reference2, setReference2] = useState('')
   const [hidePersonalInfo, setHidePersonalInfo] = useState(false)
-  const [organizationId, setOrganizationId] = useState('org1')
+  const [organizationId, setOrganizationId] = useState('')
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        const meta = user.user_metadata ?? {}
+        const first = (meta.first_name as string) ?? ''
+        const last = (meta.last_name as string) ?? ''
+        if (first || last) setFullName(`${first} ${last}`.trim())
+        if (user.email) setEmail(user.email)
+        if (user.phone) setPhone(user.phone)
+      }
+      setLoading(false)
+    })
+  }, [])
 
   function toggleLanguage(lang: string) {
     setLanguages((prev) =>
@@ -80,24 +96,34 @@ export default function ProfilePage() {
   }
 
   function handleSave() {
-    // In production, submit to API
+    // TODO: submit to API
     alert('Profile saved!')
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'profile',      label: 'Profile'                   },
-    { id: 'availability', label: 'Availability & Contact'    },
-    { id: 'references',   label: 'References & Settings'     },
+    { id: 'profile',      label: 'Profile'                },
+    { id: 'availability', label: 'Availability & Contact' },
+    { id: 'references',   label: 'References & Settings'  },
   ]
+
+  if (loading) {
+    return (
+      <AppLayout navItems={navItems} title="My Profile" role="shadchan">
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+      </AppLayout>
+    )
+  }
 
   return (
     <AppLayout navItems={navItems} title="My Profile" role="shadchan">
       {/* Page header */}
       <div className="flex items-start gap-4 mb-6">
-        <Avatar name={fullName} size="lg" />
+        <Avatar name={fullName || 'S'} size="lg" />
         <div>
-          <h2 className="text-2xl font-bold text-[#1A1A1A]">{fullName}</h2>
-          <p className="text-sm text-[#555555] mt-0.5">{city}, {state} · Shadchan</p>
+          <h2 className="text-2xl font-bold text-[#1A1A1A]">{fullName || 'Your Name'}</h2>
+          <p className="text-sm text-[#555555] mt-0.5">
+            {[city, state].filter(Boolean).join(', ') || 'Location not set'} · Shadchan
+          </p>
         </div>
       </div>
 
@@ -410,6 +436,7 @@ export default function ProfilePage() {
                     value={organizationId}
                     onChange={(e) => setOrganizationId(e.target.value)}
                   >
+                    <option value="">Select an organization…</option>
                     {mockOrgs.map((org) => (
                       <option key={org.id} value={org.id}>{org.name}</option>
                     ))}

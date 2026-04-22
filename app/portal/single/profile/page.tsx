@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   UserCircle,
@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Avatar } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/ui/badge'
 import type { NavItem } from '@/components/ui/sidebar'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/portal/single', icon: LayoutDashboard },
@@ -26,30 +27,53 @@ const navItems: NavItem[] = [
   { label: 'Messages', href: '/portal/single/messages', icon: MessageSquare, badge: '2' },
 ]
 
-const mockProfile = {
-  first_name: 'Devorah',
-  last_name: 'Levy',
-  full_hebrew_name: 'דבורה לוי',
-  gender: 'Female',
-  dob: '2001-03-14',
-  age: 25,
-  height_inches: 64,
-  city: 'Lakewood',
-  state: 'NJ',
-  country: 'USA',
-  phone: '(732) 555-0192',
-  email: 'devorah.levy@email.com',
-  about_bio:
-    'I am a warm and caring person who loves to learn and grow. I enjoy spending time with family, cooking, and volunteering in my community.',
-  looking_for:
-    'Someone who is kind, bnei Torah, and has a strong connection to family. I value someone who is growth-oriented and shares my love for a warm Jewish home.',
+interface Profile {
+  first_name: string
+  last_name: string
+  full_hebrew_name: string
+  gender: string
+  dob: string
+  age: number | null
+  height_inches: number | null
+  city: string
+  state: string
+  country: string
+  phone: string
+  email: string
+  about_bio: string
+  looking_for: string
+  photo_url: null
+  family_background: string
+  current_education: string
+  occupation: string
+  hashkafa: string
+  eretz_yisroel: string
+  high_schools: string
+  status: 'available' | 'on_hold' | 'engaged' | 'married' | 'inactive' | 'draft'
+}
+
+const blankProfile: Profile = {
+  first_name: '',
+  last_name: '',
+  full_hebrew_name: '',
+  gender: '',
+  dob: '',
+  age: null,
+  height_inches: null,
+  city: '',
+  state: '',
+  country: '',
+  phone: '',
+  email: '',
+  about_bio: '',
+  looking_for: '',
   photo_url: null,
-  family_background: 'Yeshivish/Modern; Father is a Rebbi, Mother is a nurse. Very warm family.',
-  current_education: 'Completed seminary in Eretz Yisroel (2022)',
-  occupation: 'Kindergarten teacher',
-  hashkafa: 'Yeshivish',
-  eretz_yisroel: 'Beth Rivkah Seminary, 2021–2022',
-  high_schools: 'Bais Yaakov of Lakewood',
+  family_background: '',
+  current_education: '',
+  occupation: '',
+  hashkafa: '',
+  eretz_yisroel: '',
+  high_schools: '',
   status: 'available',
 }
 
@@ -113,13 +137,30 @@ function FieldRow({
 }
 
 export default function SingleProfilePage() {
+  const [loading, setLoading] = useState(true)
+  const [profile, setProfile] = useState<Profile>(blankProfile)
   const [editMode, setEditMode] = useState(false)
   const [editValues, setEditValues] = useState<Record<string, string>>({
-    phone: mockProfile.phone,
-    email: mockProfile.email,
-    about_bio: mockProfile.about_bio,
-    looking_for: mockProfile.looking_for,
+    phone: '',
+    email: '',
+    about_bio: '',
+    looking_for: '',
   })
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        const meta = user.user_metadata ?? {}
+        const firstName = (meta.first_name as string) ?? ''
+        const lastName = (meta.last_name as string) ?? ''
+        const email = user.email ?? ''
+        const phone = user.phone ?? ''
+        setProfile((p) => ({ ...p, first_name: firstName, last_name: lastName, email, phone }))
+        setEditValues({ phone, email, about_bio: '', looking_for: '' })
+      }
+      setLoading(false)
+    })
+  }, [])
 
   function handleChange(key: string, val: string) {
     setEditValues((prev) => ({ ...prev, [key]: val }))
@@ -127,7 +168,18 @@ export default function SingleProfilePage() {
 
   function handleSave() {
     setEditMode(false)
-    // In production: submit editValues to API
+    // TODO: submit editValues to API
+  }
+
+  const displayName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Your Name'
+  const displayLocation = [profile.city, profile.state].filter(Boolean).join(', ')
+
+  if (loading) {
+    return (
+      <AppLayout navItems={navItems} title="My Profile" role="single">
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+      </AppLayout>
+    )
   }
 
   return (
@@ -135,14 +187,12 @@ export default function SingleProfilePage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
-          <Avatar name={`${mockProfile.first_name} ${mockProfile.last_name}`} size="lg" />
+          <Avatar name={displayName} size="lg" />
           <div>
-            <h2 className="text-xl font-bold text-[#1A1A1A]">
-              {mockProfile.first_name} {mockProfile.last_name}
-            </h2>
-            <p className="text-sm text-[#555555]">{mockProfile.city}, {mockProfile.state}</p>
+            <h2 className="text-xl font-bold text-[#1A1A1A]">{displayName}</h2>
+            {displayLocation && <p className="text-sm text-[#555555]">{displayLocation}</p>}
             <div className="mt-1">
-              <StatusBadge status={mockProfile.status} />
+              <StatusBadge status={profile.status} />
             </div>
           </div>
         </div>
@@ -174,16 +224,16 @@ export default function SingleProfilePage() {
         {/* Personal Information */}
         <div className="card">
           <h3 className="font-semibold text-[#1A1A1A] mb-2">Personal Information</h3>
-          <FieldRow label="Full Name" value={`${mockProfile.first_name} ${mockProfile.last_name}`} />
-          <FieldRow label="Hebrew Name" value={mockProfile.full_hebrew_name} />
-          <FieldRow label="Gender" value={mockProfile.gender} />
-          <FieldRow label="Date of Birth" value={mockProfile.dob} />
-          <FieldRow label="Age" value={String(mockProfile.age)} />
-          <FieldRow label="Height" value={heightDisplay(mockProfile.height_inches)} />
-          <FieldRow label="City" value={`${mockProfile.city}, ${mockProfile.state}`} />
+          <FieldRow label="Full Name" value={displayName} />
+          <FieldRow label="Hebrew Name" value={profile.full_hebrew_name} />
+          <FieldRow label="Gender" value={profile.gender} />
+          <FieldRow label="Date of Birth" value={profile.dob} />
+          <FieldRow label="Age" value={profile.age != null ? String(profile.age) : ''} />
+          <FieldRow label="Height" value={profile.height_inches ? heightDisplay(profile.height_inches) : ''} />
+          <FieldRow label="City" value={displayLocation} />
           <FieldRow
             label="Phone"
-            value={mockProfile.phone}
+            value={editValues.phone || profile.phone}
             editable
             editMode={editMode}
             fieldKey="phone"
@@ -192,7 +242,7 @@ export default function SingleProfilePage() {
           />
           <FieldRow
             label="Email"
-            value={mockProfile.email}
+            value={editValues.email || profile.email}
             editable
             editMode={editMode}
             fieldKey="email"
@@ -204,12 +254,12 @@ export default function SingleProfilePage() {
         {/* Background & Education */}
         <div className="card">
           <h3 className="font-semibold text-[#1A1A1A] mb-2">Background & Education</h3>
-          <FieldRow label="Hashkafa" value={mockProfile.hashkafa} />
-          <FieldRow label="Family Background" value={mockProfile.family_background} />
-          <FieldRow label="High School" value={String(mockProfile.high_schools)} />
-          <FieldRow label="Eretz Yisroel" value={mockProfile.eretz_yisroel} />
-          <FieldRow label="Current Education" value={mockProfile.current_education} />
-          <FieldRow label="Occupation" value={mockProfile.occupation} />
+          <FieldRow label="Hashkafa" value={profile.hashkafa} />
+          <FieldRow label="Family Background" value={profile.family_background} />
+          <FieldRow label="High School" value={profile.high_schools} />
+          <FieldRow label="Eretz Yisroel" value={profile.eretz_yisroel} />
+          <FieldRow label="Current Education" value={profile.current_education} />
+          <FieldRow label="Occupation" value={profile.occupation} />
         </div>
 
         {/* About Me */}
@@ -217,7 +267,7 @@ export default function SingleProfilePage() {
           <h3 className="font-semibold text-[#1A1A1A] mb-2">About Me</h3>
           <FieldRow
             label="Bio"
-            value={mockProfile.about_bio}
+            value={editValues.about_bio || profile.about_bio}
             editable
             editMode={editMode}
             inputType="textarea"
@@ -232,7 +282,7 @@ export default function SingleProfilePage() {
           <h3 className="font-semibold text-[#1A1A1A] mb-2">What I Am Looking For</h3>
           <FieldRow
             label="Looking For"
-            value={mockProfile.looking_for}
+            value={editValues.looking_for || profile.looking_for}
             editable
             editMode={editMode}
             inputType="textarea"
