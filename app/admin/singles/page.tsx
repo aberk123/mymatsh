@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
@@ -16,6 +17,8 @@ import {
   Home,
   BookOpen,
   MessageSquare,
+  Upload,
+  PackageOpen,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
@@ -45,6 +48,7 @@ const navItems: NavItem[] = [
   { label: 'News', href: '/admin/news', icon: Newspaper },
   { label: 'Donations', href: '/admin/donations', icon: DollarSign },
   { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
+  { label: 'Import Batches', href: '/admin/import-batches', icon: PackageOpen },
 ]
 
 type Gender = 'boys' | 'girls'
@@ -72,6 +76,7 @@ interface SingleRow {
 }
 
 export default function AdminSinglesPage() {
+  const router = useRouter()
   const [gender, setGender] = useState<Gender>('boys')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -190,14 +195,25 @@ export default function AdminSinglesPage() {
       </div>
 
       <div className="card">
-        <div className="relative mb-4 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#888888]" />
-          <Input
-            placeholder="Search singles..."
-            className="pl-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex items-center gap-3 mb-4">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#888888]" />
+            <Input
+              placeholder="Search singles..."
+              className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5 ml-auto"
+            onClick={() => router.push('/admin/import-upload')}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Import from Evernote
+          </Button>
         </div>
 
         {loading ? (

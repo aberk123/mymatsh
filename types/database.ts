@@ -99,6 +99,21 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['shadchan_profiles']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['shadchan_profiles']['Insert']>
       }
+      import_batches: {
+        Row: {
+          id: string
+          shadchan_id: string
+          submitted_by_admin_id: string
+          status: 'pending_review' | 'shadchan_approved' | 'admin_approved' | 'rejected'
+          parsed_data: Json
+          review_token: string
+          shadchan_comments: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['import_batches']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['import_batches']['Insert']>
+      }
       singles: {
         Row: {
           id: string
@@ -111,6 +126,7 @@ export interface Database {
           gender: Gender
           dob: string | null
           age: number | null
+          birth_month: string | null
           phone: string | null
           email: string | null
           address: string | null

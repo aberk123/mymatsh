@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -13,7 +13,9 @@ import {
   UsersRound,
   UserCircle,
   ChevronLeft,
+  AlertTriangle,
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { AppLayout } from '@/components/ui/app-layout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -82,6 +84,7 @@ export default function NewSinglePage() {
   const [currentStep, setCurrentStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [dupWarning, setDupWarning] = useState<string | null>(null)
 
   const {
     register,
@@ -133,6 +136,27 @@ export default function NewSinglePage() {
   const back = () => setCurrentStep((s) => Math.max(s - 1, 0))
 
   const watchedGender = watch('gender')
+  const watchedFirst = watch('first_name')
+  const watchedLast = watch('last_name')
+
+  useEffect(() => {
+    if (!watchedFirst?.trim() || !watchedLast?.trim()) { setDupWarning(null); return }
+    const timer = setTimeout(async () => {
+      const supabase = createClient()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase.from('singles') as any)
+        .select('id, first_name, last_name')
+        .ilike('first_name', watchedFirst.trim())
+        .ilike('last_name', watchedLast.trim())
+        .limit(1) as { data: Array<{ id: string; first_name: string; last_name: string }> | null }
+      if (data && data.length > 0) {
+        setDupWarning(`${data[0].first_name} ${data[0].last_name}`)
+      } else {
+        setDupWarning(null)
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [watchedFirst, watchedLast])
 
   return (
     <AppLayout navItems={navItems} title="Add New Single" role="shadchan">
@@ -153,6 +177,16 @@ export default function NewSinglePage() {
         {saveError && (
           <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
             {saveError}
+          </div>
+        )}
+
+        {dupWarning && (
+          <div className="mb-4 p-3 rounded-lg bg-orange-50 border border-orange-200 text-sm text-orange-700 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <span>
+              A single named <span className="font-semibold">{dupWarning}</span> already exists on the platform.
+              Please verify this is not a duplicate before saving.
+            </span>
           </div>
         )}
 
