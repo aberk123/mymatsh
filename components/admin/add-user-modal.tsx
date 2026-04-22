@@ -18,16 +18,25 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import type { UserRole } from '@/types/database'
 
-const schema = z.object({
-  email: z.string().email('Valid email required'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters'),
-  role: z.enum(['shadchan', 'single', 'parent', 'advocate', 'maschil'] as const, {
-    error: 'Role is required',
-  }),
-  phone: z.string().optional(),
-})
+const schema = z
+  .object({
+    firstName: z.string().min(1, 'First name is required'),
+    lastName: z.string().min(1, 'Last name is required'),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    role: z.enum(['shadchan', 'single', 'parent', 'advocate', 'maschil'] as const, {
+      error: 'Role is required',
+    }),
+  })
+  .refine(
+    (d) => !d.email || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim()),
+    { message: 'Enter a valid email address', path: ['email'] }
+  )
+  .refine(
+    (d) => (d.email && d.email.trim() !== '') || (d.phone && d.phone.trim() !== ''),
+    { message: 'Enter email, phone number, or both', path: ['email'] }
+  )
 
 type FormData = z.infer<typeof schema>
 
@@ -42,7 +51,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
 interface AddUserModalProps {
   open: boolean
   onClose: () => void
-  onSuccess?: (user: { id: string; email: string; role: UserRole }) => void
+  onSuccess?: (user: { id: string; email?: string; phone?: string; role: UserRole }) => void
 }
 
 export function AddUserModal({ open, onClose, onSuccess }: AddUserModalProps) {
@@ -65,7 +74,8 @@ export function AddUserModal({ open, onClose, onSuccess }: AddUserModalProps) {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error ?? 'Failed to create user')
 
-      toast.success(`Account created for ${data.email}`)
+      const identifier = data.email || data.phone
+      toast.success(`Account created for ${identifier}`)
       onSuccess?.(result)
       handleClose()
     } catch (e) {
@@ -91,17 +101,67 @@ export function AddUserModal({ open, onClose, onSuccess }: AddUserModalProps) {
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="px-6 pb-2 space-y-4">
-            <div>
-              <Label htmlFor="add-email" required>Email Address</Label>
-              <Input
-                id="add-email"
-                type="email"
-                placeholder="user@example.com"
-                error={errors.email?.message}
-                {...register('email')}
-              />
+
+            {/* Name row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="add-first-name" required>First Name</Label>
+                <Input
+                  id="add-first-name"
+                  type="text"
+                  placeholder="Miriam"
+                  error={errors.firstName?.message}
+                  {...register('firstName')}
+                />
+              </div>
+              <div>
+                <Label htmlFor="add-last-name" required>Last Name</Label>
+                <Input
+                  id="add-last-name"
+                  type="text"
+                  placeholder="Cohen"
+                  error={errors.lastName?.message}
+                  {...register('lastName')}
+                />
+              </div>
             </div>
 
+            {/* Login identifiers */}
+            <div className="space-y-1">
+              <p className="text-xs text-[#888888]">
+                Enter email, phone number, or both — at least one is required for login.
+              </p>
+
+              <div>
+                <Label htmlFor="add-email">Email Address</Label>
+                <Input
+                  id="add-email"
+                  type="email"
+                  placeholder="user@example.com"
+                  error={errors.email?.message}
+                  {...register('email')}
+                />
+              </div>
+
+              <div className="flex items-center gap-3 py-1">
+                <div className="flex-1 h-px bg-gray-200" />
+                <span className="text-xs text-[#888888] font-medium">or</span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+
+              <div>
+                <Label htmlFor="add-phone">Phone Number</Label>
+                <Input
+                  id="add-phone"
+                  type="tel"
+                  placeholder="+1 (555) 000-0000"
+                  error={errors.phone?.message}
+                  {...register('phone')}
+                />
+              </div>
+            </div>
+
+            {/* Password */}
             <div>
               <Label htmlFor="add-password" required>Password</Label>
               <div className="relative">
@@ -124,6 +184,7 @@ export function AddUserModal({ open, onClose, onSuccess }: AddUserModalProps) {
               </div>
             </div>
 
+            {/* Role */}
             <div>
               <Label htmlFor="add-role" required>Role</Label>
               <select
@@ -143,16 +204,6 @@ export function AddUserModal({ open, onClose, onSuccess }: AddUserModalProps) {
               )}
             </div>
 
-            <div>
-              <Label htmlFor="add-phone">Phone Number <span className="text-[#888888] font-normal">(optional)</span></Label>
-              <Input
-                id="add-phone"
-                type="tel"
-                placeholder="+1 (555) 000-0000"
-                error={errors.phone?.message}
-                {...register('phone')}
-              />
-            </div>
           </div>
 
           <DialogFooter>

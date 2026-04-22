@@ -40,15 +40,26 @@ export async function POST(request: Request) {
 
     // Parse and validate body
     const body = await request.json()
-    const { email, password, role, phone } = body as {
-      email: string
+    const { firstName, lastName, email, phone, password, role } = body as {
+      firstName: string
+      lastName: string
+      email?: string
+      phone?: string
       password: string
       role: UserRole
-      phone?: string
     }
 
-    if (!email || !password || !role) {
-      return NextResponse.json({ error: 'Email, password, and role are required' }, { status: 400 })
+    const cleanEmail = email?.trim() || undefined
+    const cleanPhone = phone?.trim() || undefined
+
+    if (!firstName?.trim() || !lastName?.trim()) {
+      return NextResponse.json({ error: 'First and last name are required' }, { status: 400 })
+    }
+    if (!cleanEmail && !cleanPhone) {
+      return NextResponse.json({ error: 'Email or phone number is required' }, { status: 400 })
+    }
+    if (!password || password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
     }
 
     const validRoles: UserRole[] = ['shadchan', 'single', 'parent', 'advocate', 'maschil']
@@ -64,10 +75,15 @@ export async function POST(request: Request) {
     )
 
     const { data: newUser, error: authError } = await adminClient.auth.admin.createUser({
-      email,
+      ...(cleanEmail ? { email: cleanEmail } : {}),
+      ...(cleanPhone ? { phone: cleanPhone } : {}),
       password,
       email_confirm: true,
-      phone: phone || undefined,
+      phone_confirm: true,
+      user_metadata: {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+      },
     })
 
     if (authError) {
@@ -76,8 +92,8 @@ export async function POST(request: Request) {
 
     const { error: dbError } = await adminClient.from('users').insert({
       id: newUser.user.id,
-      email,
-      phone: phone || null,
+      email: cleanEmail ?? null,
+      phone: cleanPhone ?? null,
       role,
       status: 'active',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -89,7 +105,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: dbError.message }, { status: 400 })
     }
 
-    return NextResponse.json({ id: newUser.user.id, email, role })
+    return NextResponse.json({
+      id: newUser.user.id,
+      email: cleanEmail,
+      phone: cleanPhone,
+      role,
+    })
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

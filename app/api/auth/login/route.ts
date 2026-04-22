@@ -15,10 +15,10 @@ const ROLE_REDIRECT: Record<UserRole, string> = {
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json()
+    const { identifier, password } = await request.json()
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+    if (!identifier || !password) {
+      return NextResponse.json({ error: 'Email/phone and password are required' }, { status: 400 })
     }
 
     const cookieStore = await cookies()
@@ -44,7 +44,13 @@ export async function POST(request: Request) {
       }
     )
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    // Detect whether the identifier is an email or phone number
+    const isEmail = identifier.includes('@')
+    const signInArgs = isEmail
+      ? { email: identifier.trim(), password }
+      : { phone: identifier.trim(), password }
+
+    const { data, error } = await supabase.auth.signInWithPassword(signInArgs)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 401 })

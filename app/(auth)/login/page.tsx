@@ -11,32 +11,32 @@ import { toast } from 'sonner'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 
-const emailSchema = z.object({
-  email: z.string().email('Valid email required'),
+const passwordSchema = z.object({
+  identifier: z.string().min(1, 'Email or phone number is required'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 })
 
-const phoneSchema = z.object({
+const otpSchema = z.object({
   phone: z.string().min(10, 'Valid phone number required'),
 })
 
-type EmailFormData = z.infer<typeof emailSchema>
-type PhoneFormData = z.infer<typeof phoneSchema>
+type PasswordFormData = z.infer<typeof passwordSchema>
+type OtpFormData = z.infer<typeof otpSchema>
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const usePhone = searchParams.get('type') === 'phone'
+  const useOtp = searchParams.get('type') === 'phone'
 
-  const emailForm = useForm<EmailFormData>({ resolver: zodResolver(emailSchema) })
-  const phoneForm = useForm<PhoneFormData>({ resolver: zodResolver(phoneSchema) })
+  const passwordForm = useForm<PasswordFormData>({ resolver: zodResolver(passwordSchema) })
+  const otpForm = useForm<OtpFormData>({ resolver: zodResolver(otpSchema) })
 
-  async function onEmailSubmit(data: EmailFormData) {
+  async function onPasswordSubmit(data: PasswordFormData) {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, method: 'email' }),
+        body: JSON.stringify({ identifier: data.identifier, password: data.password }),
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error ?? 'Login failed')
@@ -46,7 +46,7 @@ function LoginForm() {
     }
   }
 
-  async function onPhoneSubmit(data: PhoneFormData) {
+  async function onOtpSubmit(data: OtpFormData) {
     try {
       const res = await fetch('/api/auth/otp-send', {
         method: 'POST',
@@ -69,34 +69,34 @@ function LoginForm() {
       <div className="flex rounded-lg border border-gray-200 mb-6 overflow-hidden">
         <Link
           href="/login"
-          className={`flex-1 py-2 text-center text-sm font-medium transition-colors ${!usePhone ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-50'}`}
+          className={`flex-1 py-2 text-center text-sm font-medium transition-colors ${!useOtp ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-50'}`}
         >
-          Email Login
+          Password Login
         </Link>
         <Link
           href="/login?type=phone"
-          className={`flex-1 py-2 text-center text-sm font-medium transition-colors ${usePhone ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-50'}`}
+          className={`flex-1 py-2 text-center text-sm font-medium transition-colors ${useOtp ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-50'}`}
         >
           Phone / OTP
         </Link>
       </div>
 
-      {usePhone ? (
-        <form onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} className="space-y-4">
+      {useOtp ? (
+        <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-4">
           <div>
-            <Label htmlFor="phone" required>Phone Number</Label>
+            <Label htmlFor="otp-phone" required>Phone Number</Label>
             <Input
-              id="phone"
+              id="otp-phone"
               type="tel"
               placeholder="+1 (555) 000-0000"
-              error={phoneForm.formState.errors.phone?.message}
-              {...phoneForm.register('phone')}
+              error={otpForm.formState.errors.phone?.message}
+              {...otpForm.register('phone')}
             />
           </div>
           <Button
             type="submit"
             className="w-full"
-            loading={phoneForm.formState.isSubmitting}
+            loading={otpForm.formState.isSubmitting}
             loadingText="Sending code..."
           >
             Send Verification Code
@@ -106,15 +106,15 @@ function LoginForm() {
           </p>
         </form>
       ) : (
-        <form onSubmit={emailForm.handleSubmit(onEmailSubmit)} className="space-y-4">
+        <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-4">
           <div>
-            <Label htmlFor="email" required>Email Address</Label>
+            <Label htmlFor="identifier" required>Email or Phone Number</Label>
             <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              error={emailForm.formState.errors.email?.message}
-              {...emailForm.register('email')}
+              id="identifier"
+              type="text"
+              placeholder="you@example.com or +1 (555) 000-0000"
+              error={passwordForm.formState.errors.identifier?.message}
+              {...passwordForm.register('identifier')}
             />
           </div>
           <div>
@@ -128,14 +128,14 @@ function LoginForm() {
               id="password"
               type="password"
               placeholder="••••••••"
-              error={emailForm.formState.errors.password?.message}
-              {...emailForm.register('password')}
+              error={passwordForm.formState.errors.password?.message}
+              {...passwordForm.register('password')}
             />
           </div>
           <Button
             type="submit"
             className="w-full"
-            loading={emailForm.formState.isSubmitting}
+            loading={passwordForm.formState.isSubmitting}
             loadingText="Signing in..."
           >
             Sign In
