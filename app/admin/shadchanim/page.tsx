@@ -13,6 +13,11 @@ import {
   Search,
   CheckCircle,
   XCircle,
+  UserPlus,
+  UsersRound,
+  Home,
+  BookOpen,
+  MessageSquare,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
@@ -25,14 +30,19 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { AddShadchanModal } from '@/components/admin/add-shadchan-modal'
 import type { NavItem } from '@/components/ui/sidebar'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { label: 'Users', href: '/admin/users', icon: Users },
   { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck, badge: '4' },
-  { label: 'Organizations', href: '/admin/organizations', icon: Building2 },
+  { label: 'Singles', href: '/admin/singles', icon: UsersRound },
+  { label: 'Parents', href: '/admin/parents', icon: Home },
   { label: 'Advocates', href: '/admin/advocates', icon: Heart },
+  { label: 'Maschilim', href: '/admin/maschilim', icon: BookOpen },
+  { label: 'Messages', href: '/admin/messages', icon: MessageSquare },
+  { label: 'Organizations', href: '/admin/organizations', icon: Building2 },
   { label: 'News', href: '/admin/news', icon: Newspaper },
   { label: 'Donations', href: '/admin/donations', icon: DollarSign },
   { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
@@ -46,14 +56,14 @@ const pendingShadchanim = [
 ]
 
 const allShadchanim = [
-  { id: '5', name: 'Rivka Klein', city: 'Brooklyn, NY', email: 'rivka.k@example.com', phone: '(718) 555-0505', references: 5, approvedDate: 'Mar 10, 2026', status: 'active' },
-  { id: '6', name: 'Moshe Greenberg', city: 'Lakewood, NJ', email: 'm.greenberg@example.com', phone: '(732) 555-0606', references: 3, approvedDate: 'Mar 5, 2026', status: 'active' },
-  { id: '7', name: 'Devorah Levi', city: 'Chicago, IL', email: 'd.levi@example.com', phone: '(312) 555-0707', references: 2, approvedDate: 'Feb 28, 2026', status: 'active' },
-  { id: '8', name: 'Avraham Katz', city: 'Monsey, NY', email: 'a.katz@example.com', phone: '(845) 555-0808', references: 6, approvedDate: 'Feb 20, 2026', status: 'active' },
-  { id: '9', name: 'Leah Blum', city: 'Passaic, NJ', email: 'l.blum@example.com', phone: '(973) 555-0909', references: 4, approvedDate: 'Feb 15, 2026', status: 'active' },
-  { id: '10', name: 'Shmuel Weiss', city: 'Baltimore, MD', email: 's.weiss@example.com', phone: '(410) 555-1010', references: 3, approvedDate: 'Jan 30, 2026', status: 'active' },
-  { id: '11', name: 'Nechama Cohen', city: 'Teaneck, NJ', email: 'n.cohen@example.com', phone: '(201) 555-1111', references: 5, approvedDate: 'Jan 22, 2026', status: 'active' },
-  { id: '12', name: 'Pinchas Rubin', city: 'Lawrence, NY', email: 'p.rubin@example.com', phone: '(516) 555-1212', references: 2, approvedDate: 'Jan 15, 2026', status: 'inactive' },
+  { id: '5', name: 'Rivka Klein', city: 'Brooklyn, NY', email: 'rivka.k@example.com', phone: '(718) 555-0505', references: 5, approvedDate: 'Mar 10, 2026', status: 'active', matchesMade: 12, singlesManaged: 8, lastActive: 'Apr 21, 2026' },
+  { id: '6', name: 'Moshe Greenberg', city: 'Lakewood, NJ', email: 'm.greenberg@example.com', phone: '(732) 555-0606', references: 3, approvedDate: 'Mar 5, 2026', status: 'active', matchesMade: 7, singlesManaged: 5, lastActive: 'Apr 20, 2026' },
+  { id: '7', name: 'Devorah Levi', city: 'Chicago, IL', email: 'd.levi@example.com', phone: '(312) 555-0707', references: 2, approvedDate: 'Feb 28, 2026', status: 'active', matchesMade: 4, singlesManaged: 6, lastActive: 'Apr 19, 2026' },
+  { id: '8', name: 'Avraham Katz', city: 'Monsey, NY', email: 'a.katz@example.com', phone: '(845) 555-0808', references: 6, approvedDate: 'Feb 20, 2026', status: 'active', matchesMade: 19, singlesManaged: 11, lastActive: 'Apr 21, 2026' },
+  { id: '9', name: 'Leah Blum', city: 'Passaic, NJ', email: 'l.blum@example.com', phone: '(973) 555-0909', references: 4, approvedDate: 'Feb 15, 2026', status: 'active', matchesMade: 3, singlesManaged: 4, lastActive: 'Apr 18, 2026' },
+  { id: '10', name: 'Shmuel Weiss', city: 'Baltimore, MD', email: 's.weiss@example.com', phone: '(410) 555-1010', references: 3, approvedDate: 'Jan 30, 2026', status: 'active', matchesMade: 8, singlesManaged: 7, lastActive: 'Apr 15, 2026' },
+  { id: '11', name: 'Nechama Cohen', city: 'Teaneck, NJ', email: 'n.cohen@example.com', phone: '(201) 555-1111', references: 5, approvedDate: 'Jan 22, 2026', status: 'active', matchesMade: 15, singlesManaged: 9, lastActive: 'Apr 20, 2026' },
+  { id: '12', name: 'Pinchas Rubin', city: 'Lawrence, NY', email: 'p.rubin@example.com', phone: '(516) 555-1212', references: 2, approvedDate: 'Jan 15, 2026', status: 'inactive', matchesMade: 2, singlesManaged: 0, lastActive: 'Mar 1, 2026' },
 ]
 
 export default function AdminShadchanimPage() {
@@ -61,6 +71,7 @@ export default function AdminShadchanimPage() {
   const [search, setSearch] = useState('')
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [pendingList, setPendingList] = useState(pendingShadchanim)
+  const [addOpen, setAddOpen] = useState(false)
 
   const pendingFiltered = pendingList.filter(
     (s) =>
@@ -89,6 +100,14 @@ export default function AdminShadchanimPage() {
 
   return (
     <AppLayout navItems={navItems} title="Shadchanim" role="platform_admin">
+      {/* Header with Add button */}
+      <div className="flex justify-end mb-4">
+        <Button className="gap-2" onClick={() => setAddOpen(true)}>
+          <UserPlus className="h-4 w-4" />
+          Add Shadchan
+        </Button>
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 mb-6">
         <button
@@ -196,9 +215,10 @@ export default function AdminShadchanimPage() {
                   <th className="table-th">Name</th>
                   <th className="table-th">City</th>
                   <th className="table-th">Email</th>
-                  <th className="table-th">Phone</th>
-                  <th className="table-th">References</th>
                   <th className="table-th">Approved Date</th>
+                  <th className="table-th">Matches Made</th>
+                  <th className="table-th">Singles Managed</th>
+                  <th className="table-th">Last Active</th>
                   <th className="table-th">Status</th>
                 </tr>
               </thead>
@@ -208,9 +228,14 @@ export default function AdminShadchanimPage() {
                     <td className="table-td font-medium text-[#1A1A1A]">{s.name}</td>
                     <td className="table-td text-[#555555]">{s.city}</td>
                     <td className="table-td text-[#555555]">{s.email}</td>
-                    <td className="table-td text-[#555555]">{s.phone}</td>
-                    <td className="table-td text-[#555555]">{s.references}</td>
                     <td className="table-td text-[#555555]">{s.approvedDate}</td>
+                    <td className="table-td text-center">
+                      <span className="font-semibold text-[#1A1A1A]">{s.matchesMade}</span>
+                    </td>
+                    <td className="table-td text-center">
+                      <span className="font-semibold text-[#1A1A1A]">{s.singlesManaged}</span>
+                    </td>
+                    <td className="table-td text-[#555555]">{s.lastActive}</td>
                     <td className="table-td">
                       <StatusBadge status={s.status} />
                     </td>
@@ -218,7 +243,7 @@ export default function AdminShadchanimPage() {
                 ))}
                 {allFiltered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="table-td text-center text-[#888888] py-8">
+                    <td colSpan={8} className="table-td text-center text-[#888888] py-8">
                       No shadchanim found.
                     </td>
                   </tr>
@@ -254,6 +279,8 @@ export default function AdminShadchanimPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AddShadchanModal open={addOpen} onClose={() => setAddOpen(false)} />
     </AppLayout>
   )
 }

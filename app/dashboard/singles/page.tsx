@@ -12,7 +12,6 @@ import {
   UserCircle,
   Plus,
   Eye,
-  Pencil,
   Search,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
@@ -31,23 +30,28 @@ const navItems: NavItem[] = [
   { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
 ]
 
+// Shadchan's private labels (per-shadchan, not visible to other shadchanim)
 const allSingles = [
-  { id: '1', name: 'Yosef Goldstein', gender: 'Male', age: 26, city: 'Brooklyn, NY', status: 'available', labels: ['Yeshivish'], dateAdded: 'Apr 1, 2026' },
-  { id: '2', name: 'Devorah Friedman', gender: 'Female', age: 23, city: 'Lakewood, NJ', status: 'available', labels: ['Bais Yaakov'], dateAdded: 'Apr 3, 2026' },
-  { id: '3', name: 'Shmuel Weiss', gender: 'Male', age: 28, city: 'Monsey, NY', status: 'on_hold', labels: ['Modern Orthodox'], dateAdded: 'Mar 28, 2026' },
+  { id: '1', name: 'Yosef Goldstein', gender: 'Male', age: 26, city: 'Brooklyn, NY', status: 'available', labels: ['Yeshivish', 'Top priority'], dateAdded: 'Apr 1, 2026' },
+  { id: '2', name: 'Devorah Friedman', gender: 'Female', age: 23, city: 'Lakewood, NJ', status: 'available', labels: ['Bais Yaakov', 'Ready to start'], dateAdded: 'Apr 3, 2026' },
+  { id: '3', name: 'Shmuel Weiss', gender: 'Male', age: 28, city: 'Monsey, NY', status: 'on_hold', labels: ['Needs follow-up'], dateAdded: 'Mar 28, 2026' },
   { id: '4', name: 'Rivka Blum', gender: 'Female', age: 22, city: 'Baltimore, MD', status: 'draft', labels: [], dateAdded: 'Apr 10, 2026' },
-  { id: '5', name: 'Menachem Katz', gender: 'Male', age: 25, city: 'Chicago, IL', status: 'available', labels: ['Yeshivish'], dateAdded: 'Apr 5, 2026' },
+  { id: '5', name: 'Menachem Katz', gender: 'Male', age: 25, city: 'Chicago, IL', status: 'available', labels: ['Yeshivish', 'Quick to decide'], dateAdded: 'Apr 5, 2026' },
   { id: '6', name: 'Chana Rosenberg', gender: 'Female', age: 24, city: 'Queens, NY', status: 'available', labels: ['Sephardic'], dateAdded: 'Apr 7, 2026' },
   { id: '7', name: 'Avraham Stern', gender: 'Male', age: 27, city: 'Passaic, NJ', status: 'inactive', labels: [], dateAdded: 'Mar 15, 2026' },
-  { id: '8', name: 'Miriam Levine', gender: 'Female', age: 21, city: 'Cleveland, OH', status: 'available', labels: ['Bais Yaakov'], dateAdded: 'Apr 12, 2026' },
+  { id: '8', name: 'Miriam Levine', gender: 'Female', age: 21, city: 'Cleveland, OH', status: 'available', labels: ['Bais Yaakov', 'Top priority'], dateAdded: 'Apr 12, 2026' },
   { id: '9', name: 'Pinchas Shapiro', gender: 'Male', age: 29, city: 'Teaneck, NJ', status: 'engaged', labels: ['Modern Orthodox'], dateAdded: 'Jan 10, 2026' },
-  { id: '10', name: 'Leah Schwartz', gender: 'Female', age: 25, city: 'Silver Spring, MD', status: 'available', labels: ['Yeshivish'], dateAdded: 'Apr 14, 2026' },
+  { id: '10', name: 'Leah Schwartz', gender: 'Female', age: 25, city: 'Silver Spring, MD', status: 'available', labels: ['Yeshivish', 'Ready to start'], dateAdded: 'Apr 14, 2026' },
 ]
+
+// All unique labels across this shadchan's singles
+const allLabels = Array.from(new Set(allSingles.flatMap((s) => s.labels))).sort()
 
 export default function SinglesPage() {
   const [search, setSearch] = useState('')
   const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [labelFilter, setLabelFilter] = useState('all')
   const [page, setPage] = useState(1)
   const pageSize = 10
 
@@ -57,7 +61,8 @@ export default function SinglesPage() {
       s.city.toLowerCase().includes(search.toLowerCase())
     const matchesGender = genderFilter === 'All' || s.gender === genderFilter
     const matchesStatus = statusFilter === 'all' || s.status === statusFilter
-    return matchesSearch && matchesGender && matchesStatus
+    const matchesLabel = labelFilter === 'all' || s.labels.includes(labelFilter)
+    return matchesSearch && matchesGender && matchesStatus && matchesLabel
   })
 
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize)
@@ -114,6 +119,16 @@ export default function SinglesPage() {
             <option value="engaged">Engaged</option>
             <option value="inactive">Inactive</option>
           </select>
+          <select
+            className="input-base w-auto min-w-[140px]"
+            value={labelFilter}
+            onChange={(e) => { setLabelFilter(e.target.value); setPage(1) }}
+          >
+            <option value="all">All Labels</option>
+            {allLabels.map((label) => (
+              <option key={label} value={label}>{label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -135,7 +150,7 @@ export default function SinglesPage() {
                 <th className="table-th">Age</th>
                 <th className="table-th">City</th>
                 <th className="table-th">Status</th>
-                <th className="table-th">Labels</th>
+                <th className="table-th">Your Labels</th>
                 <th className="table-th">Date Added</th>
                 <th className="table-th">Actions</th>
               </tr>
@@ -167,18 +182,12 @@ export default function SinglesPage() {
                   </td>
                   <td className="table-td text-[#555555] whitespace-nowrap">{single.dateAdded}</td>
                   <td className="table-td">
-                    <div className="flex items-center gap-1">
-                      <Link href={`/dashboard/singles/${single.id}`}>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                      </Link>
-                      <Link href={`/dashboard/singles/${single.id}/edit`}>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </Link>
-                    </div>
+                    {/* View only — shadchanim cannot edit single profiles */}
+                    <Link href={`/dashboard/singles/${single.id}`}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
                   </td>
                 </tr>
               ))}

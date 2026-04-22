@@ -58,11 +58,30 @@ export async function POST(request: Request) {
 
     const { data: userRow } = await supabase
       .from('users')
-      .select('role')
+      .select('role, status')
       .eq('id', data.user.id)
       .maybeSingle()
 
-    const role = (userRow as { role: UserRole } | null)?.role
+    const row = userRow as { role: UserRole; status: string } | null
+
+    if (row?.status === 'pending') {
+      // Sign the user back out so they don't get a session
+      await supabase.auth.signOut()
+      return NextResponse.json(
+        { error: 'Your application is pending review. You will be notified once it has been approved.' },
+        { status: 403 }
+      )
+    }
+
+    if (row?.status === 'suspended') {
+      await supabase.auth.signOut()
+      return NextResponse.json(
+        { error: 'Your account has been suspended. Please contact support.' },
+        { status: 403 }
+      )
+    }
+
+    const role = row?.role
     const redirectTo = role ? (ROLE_REDIRECT[role] ?? '/dashboard') : '/dashboard'
 
     return NextResponse.json({ redirectTo })

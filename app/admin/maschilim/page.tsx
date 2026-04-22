@@ -11,6 +11,7 @@ import {
   DollarSign,
   ClipboardList,
   CheckCircle,
+  XCircle,
   Eye,
   UsersRound,
   Home,
@@ -37,46 +38,33 @@ const navItems: NavItem[] = [
   { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
 ]
 
-const pendingAdvocates = [
-  {
-    id: '1',
-    name: 'Tzipora Mandelbaum',
-    city: 'Lakewood, NJ',
-    email: 't.mandelbaum@example.com',
-    languages: ['English', 'Yiddish'],
-    dateApplied: 'Apr 19, 2026',
-  },
-  {
-    id: '2',
-    name: 'Binyamin Schwartz',
-    city: 'Monsey, NY',
-    email: 'b.schwartz@example.com',
-    languages: ['English', 'Hebrew'],
-    dateApplied: 'Apr 16, 2026',
-  },
+const initialPending = [
+  { id: '1', name: 'Yankel Grossman', city: 'Lakewood, NJ', email: 'y.grossman@example.com', dateApplied: 'Apr 19, 2026' },
+  { id: '2', name: 'Tzippora Mandelbaum', city: 'Brooklyn, NY', email: 't.mandelbaum@example.com', dateApplied: 'Apr 16, 2026' },
 ]
 
-const allAdvocates = [
-  { id: '3', name: 'Devorah Blum', city: 'Brooklyn, NY', email: 'd.blum@example.com', languages: ['English', 'Yiddish'], approved: true },
-  { id: '4', name: 'Ari Friedman', city: 'Teaneck, NJ', email: 'a.friedman@example.com', languages: ['English'], approved: true },
-  { id: '5', name: 'Shaina Goldberg', city: 'Baltimore, MD', email: 's.goldberg@example.com', languages: ['English', 'Hebrew', 'Russian'], approved: true },
-  { id: '6', name: 'Nachum Peretz', city: 'Chicago, IL', email: 'n.peretz@example.com', languages: ['English', 'Hebrew'], approved: true },
-  { id: '7', name: 'Malka Hirsch', city: 'Passaic, NJ', email: 'm.hirsch@example.com', languages: ['English', 'Yiddish'], approved: false },
-  { id: '8', name: 'Chaim Lichtenstein', city: 'Lawrence, NY', email: 'c.lichten@example.com', languages: ['English'], approved: true },
-  { id: '9', name: 'Esther Birnbaum', city: 'Lakewood, NJ', email: 'e.birnbaum@example.com', languages: ['English', 'Hebrew'], approved: true },
-  { id: '10', name: 'Yankel Moskowitz', city: 'Crown Heights, NY', email: 'y.moskowitz@example.com', languages: ['English', 'Yiddish', 'Russian'], approved: false },
+const allMaschilim = [
+  { id: '3', name: 'Pinchas Rubenstein', city: 'Monsey, NY', email: 'p.rubenstein@example.com', approvedDate: 'Mar 15, 2026', status: 'active' },
+  { id: '4', name: 'Chana Berkowitz', city: 'Lakewood, NJ', email: 'c.berkowitz@example.com', approvedDate: 'Feb 28, 2026', status: 'active' },
+  { id: '5', name: 'Moshe Lichtenstein', city: 'Chicago, IL', email: 'm.lichten@example.com', approvedDate: 'Feb 10, 2026', status: 'active' },
+  { id: '6', name: 'Esther Shapiro', city: 'Baltimore, MD', email: 'e.shapiro@example.com', approvedDate: 'Jan 20, 2026', status: 'inactive' },
+  { id: '7', name: 'Binyamin Kessler', city: 'Lawrence, NY', email: 'b.kessler@example.com', approvedDate: 'Jan 8, 2026', status: 'active' },
 ]
 
-export default function AdminAdvocatesPage() {
+export default function AdminMaschilimPage() {
   const [tab, setTab] = useState<'pending' | 'all'>('pending')
-  const [pendingList, setPendingList] = useState(pendingAdvocates)
+  const [pendingList, setPendingList] = useState(initialPending)
 
-  const handleApprove = (id: string) => {
-    setPendingList((prev) => prev.filter((a) => a.id !== id))
+  function handleApprove(id: string) {
+    setPendingList((prev) => prev.filter((m) => m.id !== id))
+  }
+
+  function handleReject(id: string) {
+    setPendingList((prev) => prev.filter((m) => m.id !== id))
   }
 
   return (
-    <AppLayout navItems={navItems} title="Advocates" role="platform_admin">
+    <AppLayout navItems={navItems} title="Maschilim" role="platform_admin">
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 mb-6">
         <button
@@ -100,9 +88,9 @@ export default function AdminAdvocatesPage() {
           }`}
           onClick={() => setTab('all')}
         >
-          All Advocates
+          All Maschilim
           <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {allAdvocates.length}
+            {allMaschilim.length}
           </span>
         </button>
       </div>
@@ -116,33 +104,36 @@ export default function AdminAdvocatesPage() {
                   <th className="table-th">Name</th>
                   <th className="table-th">City</th>
                   <th className="table-th">Email</th>
-                  <th className="table-th">Languages</th>
                   <th className="table-th">Date Applied</th>
                   <th className="table-th">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {pendingList.map((a) => (
-                  <tr key={a.id} className="table-row">
-                    <td className="table-td font-medium text-[#1A1A1A]">{a.name}</td>
-                    <td className="table-td text-[#555555]">{a.city}</td>
-                    <td className="table-td text-[#555555]">{a.email}</td>
-                    <td className="table-td text-[#555555]">{a.languages.join(', ')}</td>
-                    <td className="table-td text-[#555555]">{a.dateApplied}</td>
+                {pendingList.map((m) => (
+                  <tr key={m.id} className="table-row">
+                    <td className="table-td font-medium text-[#1A1A1A]">{m.name}</td>
+                    <td className="table-td text-[#555555]">{m.city}</td>
+                    <td className="table-td text-[#555555]">{m.email}</td>
+                    <td className="table-td text-[#555555]">{m.dateApplied}</td>
                     <td className="table-td">
                       <div className="flex items-center gap-2">
                         <Button
                           variant="primary"
                           size="sm"
                           className="gap-1"
-                          onClick={() => handleApprove(a.id)}
+                          onClick={() => handleApprove(m.id)}
                         >
                           <CheckCircle className="h-3.5 w-3.5" />
                           Approve
                         </Button>
-                        <Button variant="ghost" size="sm" className="gap-1">
-                          <Eye className="h-3.5 w-3.5" />
-                          View
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => handleReject(m.id)}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Reject
                         </Button>
                       </div>
                     </td>
@@ -150,8 +141,8 @@ export default function AdminAdvocatesPage() {
                 ))}
                 {pendingList.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="table-td text-center text-[#888888] py-8">
-                      No pending advocates.
+                    <td colSpan={5} className="table-td text-center text-[#888888] py-8">
+                      No pending maschilim.
                     </td>
                   </tr>
                 )}
@@ -166,20 +157,20 @@ export default function AdminAdvocatesPage() {
                   <th className="table-th">Name</th>
                   <th className="table-th">City</th>
                   <th className="table-th">Email</th>
-                  <th className="table-th">Languages</th>
+                  <th className="table-th">Approved Date</th>
                   <th className="table-th">Status</th>
                   <th className="table-th">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {allAdvocates.map((a) => (
-                  <tr key={a.id} className="table-row">
-                    <td className="table-td font-medium text-[#1A1A1A]">{a.name}</td>
-                    <td className="table-td text-[#555555]">{a.city}</td>
-                    <td className="table-td text-[#555555]">{a.email}</td>
-                    <td className="table-td text-[#555555]">{a.languages.join(', ')}</td>
+                {allMaschilim.map((m) => (
+                  <tr key={m.id} className="table-row">
+                    <td className="table-td font-medium text-[#1A1A1A]">{m.name}</td>
+                    <td className="table-td text-[#555555]">{m.city}</td>
+                    <td className="table-td text-[#555555]">{m.email}</td>
+                    <td className="table-td text-[#555555]">{m.approvedDate}</td>
                     <td className="table-td">
-                      <StatusBadge status={a.approved ? 'active' : 'pending'} />
+                      <StatusBadge status={m.status} />
                     </td>
                     <td className="table-td">
                       <Button variant="ghost" size="sm" className="gap-1">

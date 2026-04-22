@@ -1,0 +1,103 @@
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { type Database } from '@/types/database'
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const {
+      role,
+      firstName,
+      lastName,
+      email,
+      phone,
+      password,
+      city,
+      state,
+      yearsExperience,
+      expertise,
+      ageBracket,
+      contactPref,
+      bestDay,
+      bestTime,
+      reference,
+    } = body
+
+    if (!role || !password) {
+      return NextResponse.json({ error: 'Role and password are required' }, { status: 400 })
+    }
+
+    if (!email?.trim() && !phone?.trim()) {
+      return NextResponse.json({ error: 'Email or phone is required' }, { status: 400 })
+    }
+
+    const cookieStore = await cookies()
+
+    // Use service role key to bypass RLS for user creation
+    const adminClient = createServerClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll() },
+          setAll() {},
+        },
+      }
+    )
+
+    // shadchan accounts start as pending, all others as active
+    const status = role === 'shadchan' ? 'pending' : 'active'
+
+    const metadata: Record<string, string> = {
+      first_name: firstName ?? '',
+      last_name: lastName ?? '',
+    }
+    if (role === 'shadchan') {
+      if (city) metadata.city = city
+      if (state) metadata.state = state
+      if (yearsExperience) metadata.years_experience = yearsExperience
+      if (expertise) metadata.expertise = expertise
+      if (ageBracket) metadata.age_bracket = ageBracket
+      if (contactPref) metadata.contact_pref = contactPref
+      if (bestDay) metadata.best_day = bestDay
+      if (bestTime) metadata.best_time = bestTime
+      if (reference) metadata.reference = reference
+    }
+
+    const createArgs: Parameters<typeof adminClient.auth.admin.createUser>[0] = {
+      password,
+      user_metadata: metadata,
+      email_confirm: true,
+      phone_confirm: true,
+    }
+    if (email?.trim()) createArgs.email = email.trim()
+    if (phone?.trim()) createArgs.phone = phone.trim()
+
+    const { data, error } = await adminClient.auth.admin.createUser(createArgs)
+
+    if (error || !data.user) {
+      return NextResponse.json({ error: error?.message ?? 'Failed to create user' }, { status: 400 })
+    }
+
+    // Insert into public.users
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: dbError } = await (adminClient.from('users') as any).insert({
+      id: data.user.id,
+      role,
+      status,
+      email: email?.trim() || null,
+      phone: phone?.trim() || null,
+    })
+
+    if (dbError) {
+      // Roll back auth user
+      await adminClient.auth.admin.deleteUser(data.user.id)
+      return NextResponse.json({ error: 'Failed to save user profile' }, { status: 500 })
+    }
+
+    return NextResponse.json({ ok: true, status })
+  } catch {
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
