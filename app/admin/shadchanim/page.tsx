@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -32,11 +32,12 @@ import {
 } from '@/components/ui/dialog'
 import { AddShadchanModal } from '@/components/admin/add-shadchan-modal'
 import type { NavItem } from '@/components/ui/sidebar'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { label: 'Users', href: '/admin/users', icon: Users },
-  { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck, badge: '4' },
+  { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck },
   { label: 'Singles', href: '/admin/singles', icon: UsersRound },
   { label: 'Parents', href: '/admin/parents', icon: Home },
   { label: 'Advocates', href: '/admin/advocates', icon: Heart },
@@ -48,30 +49,185 @@ const navItems: NavItem[] = [
   { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
 ]
 
-const pendingShadchanim = [
-  { id: '1', name: 'Miriam Horowitz', city: 'Lakewood, NJ', email: 'miriam.h@example.com', phone: '(732) 555-0101', references: 2, dateApplied: 'Apr 18, 2026' },
-  { id: '2', name: 'Yehuda Rosenberg', city: 'Brooklyn, NY', email: 'y.rosenberg@example.com', phone: '(718) 555-0202', references: 3, dateApplied: 'Apr 17, 2026' },
-  { id: '3', name: 'Chana Feldman', city: 'Monsey, NY', email: 'chana.f@example.com', phone: '(845) 555-0303', references: 1, dateApplied: 'Apr 15, 2026' },
-  { id: '4', name: 'Avigail Stern', city: 'Baltimore, MD', email: 'avigail.s@example.com', phone: '(410) 555-0404', references: 4, dateApplied: 'Apr 12, 2026' },
-]
+interface PendingShadchan {
+  id: string
+  user_id: string
+  name: string
+  city: string
+  email: string
+  phone: string
+  references: number
+  dateApplied: string
+}
 
-const allShadchanim = [
-  { id: '5', name: 'Rivka Klein', city: 'Brooklyn, NY', email: 'rivka.k@example.com', phone: '(718) 555-0505', references: 5, approvedDate: 'Mar 10, 2026', status: 'active', matchesMade: 12, singlesManaged: 8, lastActive: 'Apr 21, 2026' },
-  { id: '6', name: 'Moshe Greenberg', city: 'Lakewood, NJ', email: 'm.greenberg@example.com', phone: '(732) 555-0606', references: 3, approvedDate: 'Mar 5, 2026', status: 'active', matchesMade: 7, singlesManaged: 5, lastActive: 'Apr 20, 2026' },
-  { id: '7', name: 'Devorah Levi', city: 'Chicago, IL', email: 'd.levi@example.com', phone: '(312) 555-0707', references: 2, approvedDate: 'Feb 28, 2026', status: 'active', matchesMade: 4, singlesManaged: 6, lastActive: 'Apr 19, 2026' },
-  { id: '8', name: 'Avraham Katz', city: 'Monsey, NY', email: 'a.katz@example.com', phone: '(845) 555-0808', references: 6, approvedDate: 'Feb 20, 2026', status: 'active', matchesMade: 19, singlesManaged: 11, lastActive: 'Apr 21, 2026' },
-  { id: '9', name: 'Leah Blum', city: 'Passaic, NJ', email: 'l.blum@example.com', phone: '(973) 555-0909', references: 4, approvedDate: 'Feb 15, 2026', status: 'active', matchesMade: 3, singlesManaged: 4, lastActive: 'Apr 18, 2026' },
-  { id: '10', name: 'Shmuel Weiss', city: 'Baltimore, MD', email: 's.weiss@example.com', phone: '(410) 555-1010', references: 3, approvedDate: 'Jan 30, 2026', status: 'active', matchesMade: 8, singlesManaged: 7, lastActive: 'Apr 15, 2026' },
-  { id: '11', name: 'Nechama Cohen', city: 'Teaneck, NJ', email: 'n.cohen@example.com', phone: '(201) 555-1111', references: 5, approvedDate: 'Jan 22, 2026', status: 'active', matchesMade: 15, singlesManaged: 9, lastActive: 'Apr 20, 2026' },
-  { id: '12', name: 'Pinchas Rubin', city: 'Lawrence, NY', email: 'p.rubin@example.com', phone: '(516) 555-1212', references: 2, approvedDate: 'Jan 15, 2026', status: 'inactive', matchesMade: 2, singlesManaged: 0, lastActive: 'Mar 1, 2026' },
-]
+interface ApprovedShadchan {
+  id: string
+  name: string
+  city: string
+  email: string
+  approvedDate: string
+  status: string
+  matchesMade: number
+  singlesManaged: number
+}
 
 export default function AdminShadchanimPage() {
   const [tab, setTab] = useState<'pending' | 'all'>('pending')
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [pendingList, setPendingList] = useState<PendingShadchan[]>([])
+  const [approvedList, setApprovedList] = useState<ApprovedShadchan[]>([])
   const [confirmId, setConfirmId] = useState<string | null>(null)
-  const [pendingList, setPendingList] = useState(pendingShadchanim)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState('')
   const [addOpen, setAddOpen] = useState(false)
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  async function loadData() {
+    setLoading(true)
+    const supabase = createClient()
+
+    // Pending: is_approved = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: pending } = await (supabase.from('shadchan_profiles') as any)
+      .select('id, user_id, full_name, city, state, email, phone, reference_1, reference_2, created_at')
+      .eq('is_approved', false)
+      .order('created_at', { ascending: false }) as {
+        data: Array<{
+          id: string
+          user_id: string
+          full_name: string
+          city: string | null
+          state: string | null
+          email: string | null
+          phone: string | null
+          reference_1: string | null
+          reference_2: string | null
+          created_at: string
+        }> | null
+      }
+
+    setPendingList(
+      (pending ?? []).map((p) => ({
+        id: p.id,
+        user_id: p.user_id,
+        name: p.full_name,
+        city: [p.city, p.state].filter(Boolean).join(', ') || '—',
+        email: p.email ?? '—',
+        phone: p.phone ?? '—',
+        references: (p.reference_1 ? 1 : 0) + (p.reference_2 ? 1 : 0),
+        dateApplied: new Date(p.created_at).toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric',
+        }),
+      }))
+    )
+
+    // Approved: is_approved = true
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: approved } = await (supabase.from('shadchan_profiles') as any)
+      .select('id, user_id, full_name, city, state, email, approved_at')
+      .eq('is_approved', true)
+      .order('approved_at', { ascending: false }) as {
+        data: Array<{
+          id: string
+          user_id: string
+          full_name: string
+          city: string | null
+          state: string | null
+          email: string | null
+          approved_at: string | null
+        }> | null
+      }
+
+    // Load user statuses for approved shadchanim
+    const approvedUserIds = (approved ?? []).map((a) => a.user_id)
+    let userStatuses: Record<string, string> = {}
+    if (approvedUserIds.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: userRows } = await (supabase.from('users') as any)
+        .select('id, status')
+        .in('id', approvedUserIds) as { data: Array<{ id: string; status: string }> | null }
+      userStatuses = Object.fromEntries((userRows ?? []).map((u) => [u.id, u.status]))
+    }
+
+    setApprovedList(
+      (approved ?? []).map((a) => ({
+        id: a.id,
+        name: a.full_name,
+        city: [a.city, a.state].filter(Boolean).join(', ') || '—',
+        email: a.email ?? '—',
+        approvedDate: a.approved_at
+          ? new Date(a.approved_at).toLocaleDateString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric',
+            })
+          : '—',
+        status: userStatuses[a.user_id] ?? 'active',
+        matchesMade: 0,
+        singlesManaged: 0,
+      }))
+    )
+
+    setLoading(false)
+  }
+
+  async function handleApprove(id: string) {
+    setActionLoading(true)
+    setActionError('')
+    try {
+      const res = await fetch(`/api/admin/shadchanim/${id}/approve`, { method: 'POST' })
+      if (!res.ok) {
+        const json = await res.json()
+        setActionError(json.error ?? 'Approval failed. Please try again.')
+        return
+      }
+      // Move from pending to approved in local state
+      const shadchan = pendingList.find((s) => s.id === id)
+      if (shadchan) {
+        setPendingList((prev) => prev.filter((s) => s.id !== id))
+        setApprovedList((prev) => [
+          {
+            id: shadchan.id,
+            name: shadchan.name,
+            city: shadchan.city,
+            email: shadchan.email,
+            approvedDate: new Date().toLocaleDateString('en-US', {
+              month: 'short', day: 'numeric', year: 'numeric',
+            }),
+            status: 'active',
+            matchesMade: 0,
+            singlesManaged: 0,
+          },
+          ...prev,
+        ])
+      }
+      setConfirmId(null)
+    } catch {
+      setActionError('Network error. Please try again.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function handleReject(id: string) {
+    setActionLoading(true)
+    setActionError('')
+    try {
+      const res = await fetch(`/api/admin/shadchanim/${id}/reject`, { method: 'POST' })
+      if (!res.ok) {
+        const json = await res.json()
+        setActionError(json.error ?? 'Rejection failed. Please try again.')
+        return
+      }
+      setPendingList((prev) => prev.filter((s) => s.id !== id))
+    } catch {
+      setActionError('Network error. Please try again.')
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
   const pendingFiltered = pendingList.filter(
     (s) =>
@@ -80,21 +236,12 @@ export default function AdminShadchanimPage() {
       s.city.toLowerCase().includes(search.toLowerCase())
   )
 
-  const allFiltered = allShadchanim.filter(
+  const allFiltered = approvedList.filter(
     (s) =>
       s.name.toLowerCase().includes(search.toLowerCase()) ||
       s.email.toLowerCase().includes(search.toLowerCase()) ||
       s.city.toLowerCase().includes(search.toLowerCase())
   )
-
-  const handleApprove = (id: string) => {
-    setPendingList((prev) => prev.filter((s) => s.id !== id))
-    setConfirmId(null)
-  }
-
-  const handleReject = (id: string) => {
-    setPendingList((prev) => prev.filter((s) => s.id !== id))
-  }
 
   const confirmingName = pendingList.find((s) => s.id === confirmId)?.name ?? ''
 
@@ -108,6 +255,12 @@ export default function AdminShadchanimPage() {
         </Button>
       </div>
 
+      {actionError && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+          {actionError}
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 mb-6">
         <button
@@ -119,9 +272,11 @@ export default function AdminShadchanimPage() {
           onClick={() => setTab('pending')}
         >
           Pending Approval
-          <span className="ml-2 bg-red-100 text-red-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {pendingList.length}
-          </span>
+          {pendingList.length > 0 && (
+            <span className="ml-2 bg-red-100 text-red-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
+              {pendingList.length}
+            </span>
+          )}
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -133,7 +288,7 @@ export default function AdminShadchanimPage() {
         >
           All Shadchanim
           <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {allShadchanim.length}
+            {approvedList.length}
           </span>
         </button>
       </div>
@@ -150,7 +305,11 @@ export default function AdminShadchanimPage() {
           />
         </div>
 
-        {tab === 'pending' ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-[#888888] text-sm">
+            Loading…
+          </div>
+        ) : tab === 'pending' ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -179,6 +338,7 @@ export default function AdminShadchanimPage() {
                           variant="primary"
                           size="sm"
                           className="gap-1"
+                          disabled={actionLoading}
                           onClick={() => setConfirmId(s.id)}
                         >
                           <CheckCircle className="h-3.5 w-3.5" />
@@ -188,6 +348,7 @@ export default function AdminShadchanimPage() {
                           variant="danger"
                           size="sm"
                           className="gap-1"
+                          disabled={actionLoading}
                           onClick={() => handleReject(s.id)}
                         >
                           <XCircle className="h-3.5 w-3.5" />
@@ -218,7 +379,6 @@ export default function AdminShadchanimPage() {
                   <th className="table-th">Approved Date</th>
                   <th className="table-th">Matches Made</th>
                   <th className="table-th">Singles Managed</th>
-                  <th className="table-th">Last Active</th>
                   <th className="table-th">Status</th>
                 </tr>
               </thead>
@@ -235,7 +395,6 @@ export default function AdminShadchanimPage() {
                     <td className="table-td text-center">
                       <span className="font-semibold text-[#1A1A1A]">{s.singlesManaged}</span>
                     </td>
-                    <td className="table-td text-[#555555]">{s.lastActive}</td>
                     <td className="table-td">
                       <StatusBadge status={s.status} />
                     </td>
@@ -243,8 +402,8 @@ export default function AdminShadchanimPage() {
                 ))}
                 {allFiltered.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="table-td text-center text-[#888888] py-8">
-                      No shadchanim found.
+                    <td colSpan={7} className="table-td text-center text-[#888888] py-8">
+                      No approved shadchanim yet.
                     </td>
                   </tr>
                 )}
@@ -262,19 +421,22 @@ export default function AdminShadchanimPage() {
           </DialogHeader>
           <div className="px-6 pb-2">
             <p className="text-sm text-[#555555]">
-              Are you sure you want to approve <span className="font-semibold text-[#1A1A1A]">{confirmingName}</span> as a shadchan? They will gain full access to the platform.
+              Are you sure you want to approve{' '}
+              <span className="font-semibold text-[#1A1A1A]">{confirmingName}</span> as a shadchan?
+              They will gain full access to the platform.
             </p>
           </div>
           <DialogFooter>
-            <Button variant="secondary" size="md" onClick={() => setConfirmId(null)}>
+            <Button variant="secondary" size="md" onClick={() => setConfirmId(null)} disabled={actionLoading}>
               Cancel
             </Button>
             <Button
               variant="primary"
               size="md"
+              disabled={actionLoading}
               onClick={() => confirmId && handleApprove(confirmId)}
             >
-              Confirm Approval
+              {actionLoading ? 'Approving…' : 'Confirm Approval'}
             </Button>
           </DialogFooter>
         </DialogContent>
