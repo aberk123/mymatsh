@@ -1,0 +1,184 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Bodoni+Moda:ital,opsz,wght@0,6..96,700;0,6..96,900;1,6..96,400&family=Playfair+Display:ital,wght@0,400;1,400;1,700&family=Cormorant+Garamond:wght@600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --sidebar-width: 210px;
+    --topbar-height: 64px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-app-bg text-[#1A1A1A] font-sans;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+}
+
+@layer components {
+  /* Logo */
+  .logo-my {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-style: italic;
+    font-size: 0.85rem;
+    color: #C8922A;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    display: block;
+  }
+  .logo-matsh {
+    font-family: 'Bodoni Moda', 'Cormorant Garamond', Georgia, serif;
+    font-weight: 900;
+    font-size: 2rem;
+    color: #FFFFFF;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    display: block;
+  }
+  .logo-matsh-sidebar {
+    font-family: 'Bodoni Moda', 'Cormorant Garamond', Georgia, serif;
+    font-weight: 900;
+    font-size: 1.6rem;
+    color: #3D0D2B;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    display: block;
+  }
+
+  /* Sidebar nav items */
+  .nav-item {
+    @apply flex items-center gap-3 py-2.5 text-[#555555] hover:bg-[#F8F0F5] hover:text-brand-maroon rounded-md mx-2 transition-colors cursor-pointer text-sm font-medium;
+    padding-inline: 1rem;
+  }
+  .nav-item-active {
+    @apply flex items-center gap-3 py-2.5 text-brand-maroon bg-[#F8F0F5] rounded-md mx-2 text-sm font-semibold cursor-pointer;
+    padding-inline: 1rem;
+    border-inline-start: 3px solid #6B1F4E;
+    padding-inline-start: calc(1rem - 3px);
+  }
+
+  /* Status badges */
+  .badge-available {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border border-green-500 text-green-600 bg-transparent;
+  }
+  .badge-engaged {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-600 text-white;
+  }
+  .badge-draft {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-400 text-gray-500 bg-transparent;
+  }
+  .badge-on-hold {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-orange-400 text-orange-500 bg-transparent;
+  }
+  .badge-inactive {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500;
+  }
+  .badge-completed {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-green-500 text-green-600 bg-transparent;
+  }
+  .badge-active {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-green-500 text-green-600 bg-transparent;
+  }
+  .badge-pending {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-gray-400 text-gray-500 bg-transparent;
+  }
+  .badge-pink {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-pink text-white;
+  }
+  .badge-public {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-pink text-white;
+  }
+  .badge-private {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-600 text-white;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-brand-maroon text-white text-sm font-medium rounded-lg hover:bg-[#5a1942] transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-pink {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-brand-pink text-white text-sm font-medium rounded-lg hover:bg-[#c91070] transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-[#555555] text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-outline-maroon {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 border border-brand-maroon text-brand-maroon text-sm font-medium rounded-lg hover:bg-[#F8F0F5] transition-colors;
+  }
+
+  /* Card */
+  .card {
+    @apply bg-white rounded-xl shadow-card p-6;
+  }
+
+  /* Form */
+  .field-label {
+    @apply text-xs uppercase tracking-wider text-[#888888] font-medium mb-1 block;
+  }
+  .input-base {
+    @apply w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-maroon/20 focus:border-brand-maroon transition-colors bg-white;
+  }
+
+  /* Welcome banner */
+  .welcome-banner {
+    @apply rounded-xl p-6 mb-6;
+    background: linear-gradient(135deg, #FDE8F5 0%, #F8E0F0 100%);
+  }
+
+  /* Avatar gradient */
+  .avatar-gradient {
+    background: linear-gradient(135deg, #6B1F4E 0%, #E91E8C 100%);
+  }
+
+  /* OTP inputs */
+  .otp-input {
+    @apply w-12 h-12 text-center text-xl font-bold border-2 border-gray-200 rounded-xl focus:outline-none focus:border-brand-maroon focus:ring-2 focus:ring-brand-maroon/20 transition-all;
+    caret-color: transparent;
+  }
+
+  /* Table */
+  .table-th {
+    @apply text-xs font-medium text-[#888888] uppercase tracking-wide pb-1 text-start;
+  }
+  .table-td {
+    @apply text-sm text-[#1A1A1A] py-3 px-4 text-start;
+  }
+  .table-row {
+    @apply border-b border-gray-100 hover:bg-gray-50 transition-colors;
+  }
+  .table-search-input {
+    @apply w-full px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:border-brand-maroon mt-1 bg-white;
+  }
+
+  /* Empty state */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 text-center;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
