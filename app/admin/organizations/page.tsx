@@ -1,19 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import {
-  LayoutDashboard,
-  Users,
-  UserCheck,
-  Building2,
-  Heart,
-  Newspaper,
-  DollarSign,
-  ClipboardList,
-  Plus,
-  Eye,
-  Pencil,
-} from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, Eye, Pencil } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,27 +15,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import type { NavItem } from '@/components/ui/sidebar'
-
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { label: 'Users', href: '/admin/users', icon: Users },
-  { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck, badge: '4' },
-  { label: 'Organizations', href: '/admin/organizations', icon: Building2 },
-  { label: 'Advocates', href: '/admin/advocates', icon: Heart },
-  { label: 'News', href: '/admin/news', icon: Newspaper },
-  { label: 'Donations', href: '/admin/donations', icon: DollarSign },
-  { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
-]
-
-const mockOrgs = [
-  { id: '1', name: "Yad L'Bachur", city: 'Lakewood, NJ', email: 'info@yadlbachur.org', members: 48, approved: true },
-  { id: '2', name: 'Shadchan Network', city: 'Brooklyn, NY', email: 'contact@shadchannetwork.com', members: 112, approved: true },
-  { id: '3', name: 'Torah Singles Initiative', city: 'Monsey, NY', email: 'admin@torahsingles.org', members: 76, approved: true },
-  { id: '4', name: 'Simcha Connect', city: 'Chicago, IL', email: 'hello@simchaconnect.org', members: 31, approved: false },
-  { id: '5', name: 'Kol B\'Ramah Foundation', city: 'Baltimore, MD', email: 'info@kolbramah.org', members: 55, approved: true },
-  { id: '6', name: 'Binyan Bayit Society', city: 'Teaneck, NJ', email: 'contact@binyanbayit.org', members: 20, approved: false },
-]
+import { mockOrgs as initialOrgs, type MockOrg } from './_data'
+import { navItems } from './_nav'
 
 interface OrgForm {
   name: string
@@ -59,7 +29,8 @@ interface OrgForm {
 const emptyForm: OrgForm = { name: '', email: '', city: '', primary_contact_name: '', is_approved: false }
 
 export default function AdminOrganizationsPage() {
-  const [orgs, setOrgs] = useState(mockOrgs)
+  const router = useRouter()
+  const [orgs, setOrgs] = useState<MockOrg[]>(initialOrgs)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<OrgForm>(emptyForm)
 
@@ -71,8 +42,10 @@ export default function AdminOrganizationsPage() {
         name: form.name || 'Untitled Org',
         city: form.city || '—',
         email: form.email || '—',
+        primaryContact: form.primary_contact_name || '—',
         members: 0,
         approved: form.is_approved,
+        createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       },
     ])
     setForm(emptyForm)
@@ -113,11 +86,21 @@ export default function AdminOrganizationsPage() {
                   </td>
                   <td className="table-td">
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" className="gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => router.push(`/admin/organizations/${org.id}`)}
+                      >
                         <Eye className="h-3.5 w-3.5" />
                         View
                       </Button>
-                      <Button variant="ghost" size="sm" className="gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1"
+                        onClick={() => router.push(`/admin/organizations/${org.id}/edit`)}
+                      >
                         <Pencil className="h-3.5 w-3.5" />
                         Edit
                       </Button>
