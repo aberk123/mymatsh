@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@/lib/zod-resolver'
 import { z } from 'zod'
@@ -27,8 +26,7 @@ type PhoneFormData = z.infer<typeof phoneSchema>
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const loginType = searchParams.get('type') // 'phone' for singles/parents
-  const [usePhone] = useState(loginType === 'phone')
+  const usePhone = searchParams.get('type') === 'phone'
 
   const emailForm = useForm<EmailFormData>({ resolver: zodResolver(emailSchema) })
   const phoneForm = useForm<PhoneFormData>({ resolver: zodResolver(phoneSchema) })
