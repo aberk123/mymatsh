@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   ArrowLeft,
@@ -17,13 +18,43 @@ import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { navItems } from '../_nav'
-import { mockOrgs } from '../_data'
+
+interface OrgDetail {
+  id: string
+  name: string
+  email: string | null
+  city: string | null
+  primary_contact_name: string | null
+  is_approved: boolean
+  created_at: string
+  memberCount: number
+}
 
 export default function OrganizationViewPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [org, setOrg] = useState<OrgDetail | null>(null)
 
-  const org = mockOrgs.find((o) => o.id === id)
+  useEffect(() => {
+    async function load() {
+      const res = await fetch(`/api/admin/organizations/${id}`)
+      if (res.ok) {
+        const data = await res.json() as OrgDetail
+        setOrg(data)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [id])
+
+  if (loading) {
+    return (
+      <AppLayout navItems={navItems} title="Organization" role="platform_admin">
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+      </AppLayout>
+    )
+  }
 
   if (!org) {
     return (
@@ -41,7 +72,6 @@ export default function OrganizationViewPage() {
 
   return (
     <AppLayout navItems={navItems} title={org.name} role="platform_admin">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={() => router.push('/admin/organizations')}
@@ -59,9 +89,7 @@ export default function OrganizationViewPage() {
         </Button>
       </div>
 
-      {/* Detail card */}
       <div className="card space-y-0 divide-y divide-gray-100">
-        {/* Name + status */}
         <div className="flex items-start justify-between pb-5">
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-xl bg-[#F8F0F5] flex items-center justify-center">
@@ -72,16 +100,15 @@ export default function OrganizationViewPage() {
               <p className="text-sm text-[#888888]">ID: {org.id}</p>
             </div>
           </div>
-          <StatusBadge status={org.approved ? 'active' : 'pending'} />
+          <StatusBadge status={org.is_approved ? 'active' : 'pending'} />
         </div>
 
-        {/* Fields */}
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5 py-5">
           <div className="flex items-start gap-3">
             <Mail className="h-4 w-4 text-[#888888] mt-0.5 shrink-0" />
             <div>
               <dt className="text-xs text-[#888888] uppercase tracking-wide font-medium">Email</dt>
-              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.email || '—'}</dd>
+              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.email ?? '—'}</dd>
             </div>
           </div>
 
@@ -89,7 +116,7 @@ export default function OrganizationViewPage() {
             <MapPin className="h-4 w-4 text-[#888888] mt-0.5 shrink-0" />
             <div>
               <dt className="text-xs text-[#888888] uppercase tracking-wide font-medium">City</dt>
-              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.city || '—'}</dd>
+              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.city ?? '—'}</dd>
             </div>
           </div>
 
@@ -97,7 +124,7 @@ export default function OrganizationViewPage() {
             <User className="h-4 w-4 text-[#888888] mt-0.5 shrink-0" />
             <div>
               <dt className="text-xs text-[#888888] uppercase tracking-wide font-medium">Primary Contact</dt>
-              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.primaryContact || '—'}</dd>
+              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.primary_contact_name ?? '—'}</dd>
             </div>
           </div>
 
@@ -105,18 +132,18 @@ export default function OrganizationViewPage() {
             <Users className="h-4 w-4 text-[#888888] mt-0.5 shrink-0" />
             <div>
               <dt className="text-xs text-[#888888] uppercase tracking-wide font-medium">Members</dt>
-              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.members}</dd>
+              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.memberCount}</dd>
             </div>
           </div>
 
           <div className="flex items-start gap-3">
-            {org.approved
+            {org.is_approved
               ? <ShieldCheck className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
               : <ShieldOff className="h-4 w-4 text-yellow-500 mt-0.5 shrink-0" />
             }
             <div>
               <dt className="text-xs text-[#888888] uppercase tracking-wide font-medium">Approval Status</dt>
-              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.approved ? 'Approved' : 'Pending Approval'}</dd>
+              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.is_approved ? 'Approved' : 'Pending Approval'}</dd>
             </div>
           </div>
 
@@ -124,7 +151,11 @@ export default function OrganizationViewPage() {
             <Calendar className="h-4 w-4 text-[#888888] mt-0.5 shrink-0" />
             <div>
               <dt className="text-xs text-[#888888] uppercase tracking-wide font-medium">Created</dt>
-              <dd className="text-sm text-[#1A1A1A] mt-0.5">{org.createdAt}</dd>
+              <dd className="text-sm text-[#1A1A1A] mt-0.5">
+                {new Date(org.created_at).toLocaleDateString('en-US', {
+                  month: 'short', day: 'numeric', year: 'numeric',
+                })}
+              </dd>
             </div>
           </div>
         </dl>

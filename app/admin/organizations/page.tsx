@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Eye, Pencil } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
@@ -15,8 +15,18 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { mockOrgs as initialOrgs, type MockOrg } from './_data'
 import { navItems } from './_nav'
+
+interface OrgRow {
+  id: string
+  name: string
+  email: string | null
+  city: string | null
+  primary_contact_name: string | null
+  is_approved: boolean
+  created_at: string
+  memberCount: number
+}
 
 interface OrgForm {
   name: string
@@ -30,26 +40,45 @@ const emptyForm: OrgForm = { name: '', email: '', city: '', primary_contact_name
 
 export default function AdminOrganizationsPage() {
   const router = useRouter()
-  const [orgs, setOrgs] = useState<MockOrg[]>(initialOrgs)
+  const [loading, setLoading] = useState(true)
+  const [orgs, setOrgs] = useState<OrgRow[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<OrgForm>(emptyForm)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
 
-  const handleAdd = () => {
-    setOrgs((prev) => [
-      ...prev,
-      {
-        id: String(Date.now()),
-        name: form.name || 'Untitled Org',
-        city: form.city || '—',
-        email: form.email || '—',
-        primaryContact: form.primary_contact_name || '—',
-        members: 0,
-        approved: form.is_approved,
-        createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      },
-    ])
-    setForm(emptyForm)
-    setDialogOpen(false)
+  useEffect(() => {
+    async function load() {
+      const res = await fetch('/api/admin/organizations')
+      if (res.ok) {
+        const data = await res.json() as OrgRow[]
+        setOrgs(data)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  async function handleAdd() {
+    if (!form.name.trim()) return
+    setCreating(true)
+    setCreateError('')
+    try {
+      const res = await fetch('/api/admin/organizations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      const newOrg = await res.json() as OrgRow
+      setOrgs((prev) => [newOrg, ...prev])
+      setForm(emptyForm)
+      setDialogOpen(false)
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to create organization')
+    } finally {
+      setCreating(false)
+    }
   }
 
   return (
@@ -62,64 +91,79 @@ export default function AdminOrganizationsPage() {
       </div>
 
       <div className="card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                <th className="table-th">Name</th>
-                <th className="table-th">City</th>
-                <th className="table-th">Email</th>
-                <th className="table-th">Members</th>
-                <th className="table-th">Status</th>
-                <th className="table-th">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orgs.map((org) => (
-                <tr key={org.id} className="table-row">
-                  <td className="table-td font-medium text-[#1A1A1A]">{org.name}</td>
-                  <td className="table-td text-[#555555]">{org.city}</td>
-                  <td className="table-td text-[#555555]">{org.email}</td>
-                  <td className="table-td text-[#555555]">{org.members}</td>
-                  <td className="table-td">
-                    <StatusBadge status={org.approved ? 'active' : 'pending'} />
-                  </td>
-                  <td className="table-td">
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1"
-                        onClick={() => router.push(`/admin/organizations/${org.id}`)}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        View
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1"
-                        onClick={() => router.push(`/admin/organizations/${org.id}/edit`)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        Edit
-                      </Button>
-                    </div>
-                  </td>
+        {loading ? (
+          <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="table-th">Name</th>
+                  <th className="table-th">City</th>
+                  <th className="table-th">Email</th>
+                  <th className="table-th">Members</th>
+                  <th className="table-th">Status</th>
+                  <th className="table-th">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {orgs.map((org) => (
+                  <tr key={org.id} className="table-row">
+                    <td className="table-td font-medium text-[#1A1A1A]">{org.name}</td>
+                    <td className="table-td text-[#555555]">{org.city ?? '—'}</td>
+                    <td className="table-td text-[#555555]">{org.email ?? '—'}</td>
+                    <td className="table-td text-[#555555]">{org.memberCount}</td>
+                    <td className="table-td">
+                      <StatusBadge status={org.is_approved ? 'active' : 'pending'} />
+                    </td>
+                    <td className="table-td">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => router.push(`/admin/organizations/${org.id}`)}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          View
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => router.push(`/admin/organizations/${org.id}/edit`)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {orgs.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="table-td text-center text-[#888888] py-8">
+                      No organizations found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Add Organization Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add Organization</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-2 space-y-4">
+            {createError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-700">
+                {createError}
+              </div>
+            )}
             <div>
               <Label className="field-label">Organization Name</Label>
               <Input
@@ -167,11 +211,21 @@ export default function AdminOrganizationsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="secondary" size="md" onClick={() => { setForm(emptyForm); setDialogOpen(false) }}>
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => { setForm(emptyForm); setDialogOpen(false) }}
+              disabled={creating}
+            >
               Cancel
             </Button>
-            <Button variant="primary" size="md" onClick={handleAdd}>
-              Add Organization
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleAdd}
+              disabled={!form.name.trim() || creating}
+            >
+              {creating ? 'Adding…' : 'Add Organization'}
             </Button>
           </DialogFooter>
         </DialogContent>

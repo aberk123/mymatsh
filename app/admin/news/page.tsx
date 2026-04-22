@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   Users,
@@ -35,7 +35,7 @@ import type { NavItem } from '@/components/ui/sidebar'
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { label: 'Users', href: '/admin/users', icon: Users },
-  { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck, badge: '4' },
+  { label: 'Shadchanim', href: '/admin/shadchanim', icon: UserCheck },
   { label: 'Singles', href: '/admin/singles', icon: UsersRound },
   { label: 'Parents', href: '/admin/parents', icon: Home },
   { label: 'Advocates', href: '/admin/advocates', icon: Heart },
@@ -50,77 +50,118 @@ const navItems: NavItem[] = [
 interface Article {
   id: string
   title: string
-  releaseDate: string
-  createdAt: string
   body: string
-  imageUrl: string
+  image_url: string | null
+  release_date: string
+  created_at: string
 }
-
-const mockArticles: Article[] = [
-  { id: '1', title: 'MyMatSH Spring 2026 Platform Update', releaseDate: 'Apr 20, 2026', createdAt: 'Apr 18, 2026', body: 'We are excited to announce several new features...', imageUrl: '' },
-  { id: '2', title: 'New Shadchan Certification Program Launching', releaseDate: 'Apr 10, 2026', createdAt: 'Apr 8, 2026', body: 'Starting this month, all new shadchanim must complete...', imageUrl: '' },
-  { id: '3', title: 'Purim 2026 Shadchan Appreciation Event Recap', releaseDate: 'Mar 18, 2026', createdAt: 'Mar 15, 2026', body: 'We gathered over 80 shadchanim in Lakewood to celebrate...', imageUrl: '' },
-  { id: '4', title: 'Torah Singles Initiative Partnership Announcement', releaseDate: 'Mar 5, 2026', createdAt: 'Mar 3, 2026', body: 'MyMatSH is proud to partner with Torah Singles Initiative...', imageUrl: '' },
-  { id: '5', title: 'January Platform Maintenance Complete', releaseDate: 'Jan 28, 2026', createdAt: 'Jan 25, 2026', body: 'All scheduled maintenance has been completed successfully...', imageUrl: '' },
-]
 
 interface ArticleForm {
   title: string
-  releaseDate: string
+  release_date: string
   body: string
-  imageUrl: string
+  image_url: string
 }
 
-const emptyForm: ArticleForm = { title: '', releaseDate: '', body: '', imageUrl: '' }
+const emptyForm: ArticleForm = { title: '', release_date: '', body: '', image_url: '' }
 
 export default function AdminNewsPage() {
-  const [articles, setArticles] = useState(mockArticles)
+  const [loading, setLoading] = useState(true)
+  const [articles, setArticles] = useState<Article[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<ArticleForm>(emptyForm)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    async function load() {
+      const res = await fetch('/api/admin/news')
+      if (res.ok) {
+        const data = await res.json() as Article[]
+        setArticles(data)
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
 
   const openCreate = () => {
     setEditingId(null)
     setForm(emptyForm)
+    setSaveError('')
     setDialogOpen(true)
   }
 
   const openEdit = (article: Article) => {
     setEditingId(article.id)
-    setForm({ title: article.title, releaseDate: article.releaseDate, body: article.body, imageUrl: article.imageUrl })
+    setForm({
+      title: article.title,
+      release_date: article.release_date,
+      body: article.body,
+      image_url: article.image_url ?? '',
+    })
+    setSaveError('')
     setDialogOpen(true)
   }
 
-  const handleSave = () => {
-    if (editingId) {
-      setArticles((prev) =>
-        prev.map((a) =>
-          a.id === editingId
-            ? { ...a, title: form.title, releaseDate: form.releaseDate, body: form.body, imageUrl: form.imageUrl }
-            : a
-        )
-      )
-    } else {
-      setArticles((prev) => [
-        {
-          id: String(Date.now()),
-          title: form.title || 'Untitled',
-          releaseDate: form.releaseDate || '—',
-          createdAt: 'Apr 21, 2026',
-          body: form.body,
-          imageUrl: form.imageUrl,
-        },
-        ...prev,
-      ])
+  const handleSave = async () => {
+    if (!form.title.trim()) return
+    setSaving(true)
+    setSaveError('')
+    try {
+      if (editingId) {
+        const res = await fetch(`/api/admin/news/${editingId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: form.title,
+            body: form.body,
+            release_date: form.release_date,
+            image_url: form.image_url,
+          }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error)
+        const updated = await res.json() as Article
+        setArticles((prev) => prev.map((a) => (a.id === editingId ? updated : a)))
+      } else {
+        const res = await fetch('/api/admin/news', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: form.title,
+            body: form.body,
+            release_date: form.release_date,
+            image_url: form.image_url,
+          }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error)
+        const newArticle = await res.json() as Article
+        setArticles((prev) => [newArticle, ...prev])
+      }
+      setForm(emptyForm)
+      setDialogOpen(false)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save article')
+    } finally {
+      setSaving(false)
     }
-    setForm(emptyForm)
-    setDialogOpen(false)
   }
 
-  const handleDelete = (id: string) => {
-    setArticles((prev) => prev.filter((a) => a.id !== id))
-    setDeleteId(null)
+  const handleDelete = async (id: string) => {
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/news/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+      setArticles((prev) => prev.filter((a) => a.id !== id))
+      setDeleteId(null)
+    } catch {
+      // ignore
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const deletingTitle = articles.find((a) => a.id === deleteId)?.title ?? ''
@@ -135,44 +176,63 @@ export default function AdminNewsPage() {
       </div>
 
       <div className="card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                <th className="table-th">Title</th>
-                <th className="table-th">Release Date</th>
-                <th className="table-th">Created At</th>
-                <th className="table-th">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {articles.map((article) => (
-                <tr key={article.id} className="table-row">
-                  <td className="table-td font-medium text-[#1A1A1A] max-w-xs truncate">{article.title}</td>
-                  <td className="table-td text-[#555555]">{article.releaseDate}</td>
-                  <td className="table-td text-[#555555]">{article.createdAt}</td>
-                  <td className="table-td">
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" className="gap-1" onClick={() => openEdit(article)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                        Edit
-                      </Button>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        className="gap-1"
-                        onClick={() => setDeleteId(article.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete
-                      </Button>
-                    </div>
-                  </td>
+        {loading ? (
+          <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="table-th">Title</th>
+                  <th className="table-th">Release Date</th>
+                  <th className="table-th">Created At</th>
+                  <th className="table-th">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {articles.map((article) => (
+                  <tr key={article.id} className="table-row">
+                    <td className="table-td font-medium text-[#1A1A1A] max-w-xs truncate">{article.title}</td>
+                    <td className="table-td text-[#555555]">
+                      {new Date(article.release_date).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}
+                    </td>
+                    <td className="table-td text-[#555555]">
+                      {new Date(article.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric',
+                      })}
+                    </td>
+                    <td className="table-td">
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="gap-1" onClick={() => openEdit(article)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => setDeleteId(article.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {articles.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="table-td text-center text-[#888888] py-8">
+                      No articles yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Create / Edit Dialog */}
@@ -182,6 +242,11 @@ export default function AdminNewsPage() {
             <DialogTitle>{editingId ? 'Edit Article' : 'Create Article'}</DialogTitle>
           </DialogHeader>
           <div className="px-6 py-2 space-y-4">
+            {saveError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-700">
+                {saveError}
+              </div>
+            )}
             <div>
               <Label className="field-label">Title</Label>
               <Input
@@ -194,8 +259,8 @@ export default function AdminNewsPage() {
               <Label className="field-label">Release Date</Label>
               <Input
                 type="date"
-                value={form.releaseDate}
-                onChange={(e) => setForm({ ...form, releaseDate: e.target.value })}
+                value={form.release_date}
+                onChange={(e) => setForm({ ...form, release_date: e.target.value })}
               />
             </div>
             <div>
@@ -211,17 +276,22 @@ export default function AdminNewsPage() {
               <Label className="field-label">Image URL</Label>
               <Input
                 placeholder="https://example.com/image.jpg"
-                value={form.imageUrl}
-                onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                value={form.image_url}
+                onChange={(e) => setForm({ ...form, image_url: e.target.value })}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="secondary" size="md" onClick={() => setDialogOpen(false)}>
+            <Button variant="secondary" size="md" onClick={() => setDialogOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button variant="primary" size="md" onClick={handleSave}>
-              {editingId ? 'Save Changes' : 'Create Article'}
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleSave}
+              disabled={!form.title.trim() || saving}
+            >
+              {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Create Article'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -241,15 +311,16 @@ export default function AdminNewsPage() {
             </p>
           </div>
           <DialogFooter>
-            <Button variant="secondary" size="md" onClick={() => setDeleteId(null)}>
+            <Button variant="secondary" size="md" onClick={() => setDeleteId(null)} disabled={deleting}>
               Cancel
             </Button>
             <Button
               variant="danger"
               size="md"
+              disabled={deleting}
               onClick={() => deleteId && handleDelete(deleteId)}
             >
-              Delete Article
+              {deleting ? 'Deleting…' : 'Delete Article'}
             </Button>
           </DialogFooter>
         </DialogContent>

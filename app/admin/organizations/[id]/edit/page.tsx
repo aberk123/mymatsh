@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
@@ -9,22 +9,76 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { navItems } from '../../_nav'
-import { mockOrgs } from '../../_data'
+
+interface OrgDetail {
+  id: string
+  name: string
+  email: string | null
+  city: string | null
+  primary_contact_name: string | null
+  is_approved: boolean
+  created_at: string
+}
 
 export default function OrganizationEditPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-
-  const org = mockOrgs.find((o) => o.id === id)
-
+  const [loading, setLoading] = useState(true)
+  const [org, setOrg] = useState<OrgDetail | null>(null)
   const [form, setForm] = useState({
-    name: org?.name ?? '',
-    email: org?.email ?? '',
-    city: org?.city ?? '',
-    primaryContact: org?.primaryContact ?? '',
-    approved: org?.approved ?? false,
+    name: '',
+    email: '',
+    city: '',
+    primary_contact_name: '',
+    is_approved: false,
   })
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    async function load() {
+      const res = await fetch(`/api/admin/organizations/${id}`)
+      if (res.ok) {
+        const data = await res.json() as OrgDetail
+        setOrg(data)
+        setForm({
+          name: data.name,
+          email: data.email ?? '',
+          city: data.city ?? '',
+          primary_contact_name: data.primary_contact_name ?? '',
+          is_approved: data.is_approved,
+        })
+      }
+      setLoading(false)
+    }
+    load()
+  }, [id])
+
+  async function handleSave() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/admin/organizations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) throw new Error((await res.json()).error)
+      toast.success('Organization updated')
+      router.push(`/admin/organizations/${id}`)
+    } catch {
+      toast.error('Failed to save changes')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <AppLayout navItems={navItems} title="Edit Organization" role="platform_admin">
+        <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
+      </AppLayout>
+    )
+  }
 
   if (!org) {
     return (
@@ -39,18 +93,8 @@ export default function OrganizationEditPage() {
     )
   }
 
-  async function handleSave() {
-    setSaving(true)
-    // TODO: replace with real API call to PATCH /api/admin/organizations/:id
-    await new Promise((r) => setTimeout(r, 600))
-    setSaving(false)
-    toast.success('Organization updated')
-    router.push(`/admin/organizations/${id}`)
-  }
-
   return (
     <AppLayout navItems={navItems} title={`Edit — ${org.name}`} role="platform_admin">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <button
           onClick={() => router.push(`/admin/organizations/${id}`)}
@@ -97,8 +141,8 @@ export default function OrganizationEditPage() {
           <Label htmlFor="edit-contact">Primary Contact Name</Label>
           <Input
             id="edit-contact"
-            value={form.primaryContact}
-            onChange={(e) => setForm({ ...form, primaryContact: e.target.value })}
+            value={form.primary_contact_name}
+            onChange={(e) => setForm({ ...form, primary_contact_name: e.target.value })}
             placeholder="e.g. Rabbi Goldstein"
           />
         </div>
@@ -108,8 +152,8 @@ export default function OrganizationEditPage() {
             id="edit-approved"
             type="checkbox"
             className="h-4 w-4 accent-brand-maroon"
-            checked={form.approved}
-            onChange={(e) => setForm({ ...form, approved: e.target.checked })}
+            checked={form.is_approved}
+            onChange={(e) => setForm({ ...form, is_approved: e.target.checked })}
           />
           <Label htmlFor="edit-approved" className="text-sm text-[#555555] cursor-pointer">
             Approved
@@ -124,10 +168,10 @@ export default function OrganizationEditPage() {
             Cancel
           </Button>
           <Button
-            onClick={handleSave}
             loading={saving}
             loadingText="Saving…"
-            disabled={!form.name.trim()}
+            disabled={!form.name.trim() || saving}
+            onClick={handleSave}
           >
             Save Changes
           </Button>
