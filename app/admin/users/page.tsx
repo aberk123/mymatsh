@@ -14,6 +14,7 @@ import {
   Eye,
   ShieldOff,
   ShieldCheck,
+  UserPlus,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatCard } from '@/components/ui/stat-card'
@@ -21,6 +22,7 @@ import { StatusBadge, RoleBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
+import { AddUserModal } from '@/components/admin/add-user-modal'
 import type { NavItem } from '@/components/ui/sidebar'
 
 const navItems: NavItem[] = [
@@ -54,6 +56,7 @@ export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
+  const [addUserOpen, setAddUserOpen] = useState(false)
   const pageSize = 10
 
   const filtered = mockUsers.filter((u) => {
@@ -69,6 +72,14 @@ export default function AdminUsersPage() {
 
   return (
     <AppLayout navItems={navItems} title="Users" role="platform_admin">
+      {/* Header actions */}
+      <div className="flex justify-end mb-4">
+        <Button className="gap-2" onClick={() => setAddUserOpen(true)}>
+          <UserPlus className="h-4 w-4" />
+          Add User
+        </Button>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard label="Total Users" value={342} icon={Users} />
@@ -179,6 +190,10 @@ export default function AdminUsersPage() {
           onPageChange={setPage}
         />
       </div>
+      <AddUserModal
+        open={addUserOpen}
+        onClose={() => setAddUserOpen(false)}
+      />
     </AppLayout>
   )
 }
