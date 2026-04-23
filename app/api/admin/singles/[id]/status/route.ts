@@ -4,6 +4,9 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { type Database } from '@/types/database'
 import { createNotification } from '@/lib/utils/notifications'
+import { sendEmail } from '@/lib/utils/send-email'
+import { sendSms } from '@/lib/utils/send-sms'
+import { emailTemplate } from '@/lib/utils/email-template'
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const cookieStore = await cookies()
@@ -68,22 +71,52 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       if (single?.created_by_shadchan_id) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: shadchanProfile } = await (adminClient.from('shadchan_profiles') as any)
-          .select('user_id')
+          .select('user_id, email, phone, full_name')
           .eq('id', single.created_by_shadchan_id)
-          .maybeSingle() as { data: { user_id: string } | null }
+          .maybeSingle() as { data: { user_id: string; email: string | null; phone: string | null; full_name: string } | null }
 
         if (shadchanProfile?.user_id) {
-          const name = `${single.first_name} ${single.last_name}`
+          const singleName = `${single.first_name} ${single.last_name}`
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://mymatsh.com'
+
+          // In-app notification
           await createNotification(shadchanProfile.user_id, 'single_status_changed', {
             single_id: params.id,
-            single_name: name,
+            single_name: singleName,
             new_status: status,
-            message: `${name} is now ${status}. Mazel Tov!`,
+            message: `${singleName} is now ${status}. Mazel Tov!`,
             link: `/dashboard/singles/${params.id}`,
           })
+
+          // Email + SMS
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: shadchanUser } = await (adminClient.from('users') as any)
+            .select('email, email_notifications, sms_notifications')
+            .eq('id', shadchanProfile.user_id)
+            .maybeSingle() as { data: { email: string | null; email_notifications: boolean; sms_notifications: boolean } | null }
+
+          const toEmail = shadchanUser?.email ?? shadchanProfile.email
+          const toPhone = shadchanProfile.phone
+
+          if (shadchanUser?.email_notifications !== false && toEmail) {
+            const html = emailTemplate(
+              `<p>Shalom ${shadchanProfile.full_name || 'there'},</p>
+               <p>🎉 <strong>Mazel Tov!</strong> ${singleName} has a status update — they are now marked as <strong>${status}</strong>.</p>
+               <p>Visit their profile for full details.</p>`,
+              `View ${single.first_name}'s Profile`,
+              `${appUrl}/dashboard/singles/${params.id}`
+            )
+            await sendEmail(toEmail, `Mazel Tov! — ${singleName}'s status has been updated`, html)
+          }
+
+          if (shadchanUser?.sms_notifications !== false && toPhone) {
+            await sendSms(toPhone, `MyMatSH: Mazel Tov! ${singleName} is now ${status}.`)
+          }
         }
       }
-    } catch { /* non-critical */ }
+    } catch (err) {
+      console.error('[single-status] notification delivery error:', err)
+    }
   }
 
   return NextResponse.json({ ok: true })

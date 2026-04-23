@@ -4,6 +4,8 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { Database } from '@/types/database'
 import { createNotification } from '@/lib/utils/notifications'
+import { sendEmail } from '@/lib/utils/send-email'
+import { emailTemplate } from '@/lib/utils/email-template'
 
 async function getCallerAndProfile() {
   const cookieStore = await cookies()
@@ -76,17 +78,38 @@ export async function POST(request: Request) {
       if (single?.created_by_shadchan_id) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: ownerProfile } = await (adminClient.from('shadchan_profiles') as any)
-          .select('user_id')
+          .select('user_id, email, full_name')
           .eq('id', single.created_by_shadchan_id)
-          .maybeSingle() as { data: { user_id: string } | null }
+          .maybeSingle() as { data: { user_id: string; email: string | null; full_name: string } | null }
 
         if (ownerProfile?.user_id) {
+          const singleName = `${single.first_name} ${single.last_name}`
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://mymatsh.com'
+
           await createNotification(ownerProfile.user_id, 'representation_request', {
             single_id: body.single_id,
-            single_name: `${single.first_name} ${single.last_name}`,
-            message: `A shadchan has requested to represent ${single.first_name} ${single.last_name}.`,
+            single_name: singleName,
+            message: `A shadchan has requested to represent ${singleName}.`,
             link: `/dashboard/singles/${body.single_id}`,
           })
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: ownerPrefs } = await (adminClient.from('users') as any)
+            .select('email, email_notifications')
+            .eq('id', ownerProfile.user_id)
+            .maybeSingle() as { data: { email: string | null; email_notifications: boolean } | null }
+
+          const toEmail = ownerPrefs?.email ?? ownerProfile.email
+          if (ownerPrefs?.email_notifications !== false && toEmail) {
+            const html = emailTemplate(
+              `<p>Shalom ${ownerProfile.full_name || 'there'},</p>
+               <p>A shadchan has submitted a <strong>representation request</strong> for ${singleName}.</p>
+               <p>Visit the single's profile to review and respond.</p>`,
+              'Review Request',
+              `${appUrl}/dashboard/singles/${body.single_id}`
+            )
+            await sendEmail(toEmail, 'New Representation Request on MyMatSH', html)
+          }
         }
       }
     } catch { /* non-critical */ }

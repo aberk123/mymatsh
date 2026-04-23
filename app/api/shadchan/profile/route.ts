@@ -50,7 +50,20 @@ export async function GET() {
     .eq('user_id', user.id)
     .maybeSingle()
 
-  return NextResponse.json({ profile: profile ?? null })
+  // Merge notification preferences from the users table into the profile response
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: userPrefs } = await (adminClient.from('users') as any)
+    .select('email_notifications, sms_notifications')
+    .eq('id', user.id)
+    .maybeSingle() as { data: { email_notifications: boolean; sms_notifications: boolean } | null }
+
+  return NextResponse.json({
+    profile: profile ? {
+      ...profile,
+      email_notifications: userPrefs?.email_notifications ?? true,
+      sms_notifications: userPrefs?.sms_notifications ?? true,
+    } : null,
+  })
 }
 
 export async function PATCH(request: Request) {
@@ -71,24 +84,33 @@ export async function PATCH(request: Request) {
 
   const body = await request.json() as Record<string, unknown>
 
-  const allowed = [
+  const profileAllowed = [
     'title', 'full_name', 'city', 'state', 'country', 'phone', 'email',
     'languages', 'availability', 'best_contact_method', 'best_day', 'best_time',
     'age_bracket', 'years_experience', 'shidduchim_made',
     'available_for_advocacy', 'rates_for_services', 'type_of_service',
     'hide_personal_info_from_profile', 'reference_1', 'reference_2', 'organization_id',
   ]
-  const updates: Record<string, unknown> = { user_id: user.id }
-  for (const key of allowed) {
-    if (key in body) updates[key] = body[key]
+  const profileUpdates: Record<string, unknown> = { user_id: user.id }
+  for (const key of profileAllowed) {
+    if (key in body) profileUpdates[key] = body[key]
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (adminClient.from('shadchan_profiles') as any)
-    .upsert(updates, { onConflict: 'user_id' })
+    .upsert(profileUpdates, { onConflict: 'user_id' })
 
   if (error) {
     return NextResponse.json({ error: (error as { message: string }).message }, { status: 500 })
+  }
+
+  // Save notification preferences to the users table
+  const userUpdates: Record<string, unknown> = {}
+  if ('email_notifications' in body) userUpdates.email_notifications = body.email_notifications
+  if ('sms_notifications' in body) userUpdates.sms_notifications = body.sms_notifications
+  if (Object.keys(userUpdates).length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (adminClient.from('users') as any).update(userUpdates).eq('id', user.id)
   }
 
   return NextResponse.json({ ok: true })

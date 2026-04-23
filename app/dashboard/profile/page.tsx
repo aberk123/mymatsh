@@ -101,6 +101,8 @@ export default function ProfilePage() {
   const [reference2, setReference2] = useState('')
   const [hidePersonalInfo, setHidePersonalInfo] = useState(false)
   const [organizationId, setOrganizationId] = useState('')
+  const [emailNotifications, setEmailNotifications] = useState(true)
+  const [smsNotifications, setSmsNotifications] = useState(true)
 
   useEffect(() => {
     async function load() {
@@ -145,6 +147,8 @@ export default function ProfilePage() {
           setReference2((profile.reference_2 as string) ?? '')
           setHidePersonalInfo((profile.hide_personal_info_from_profile as boolean) ?? false)
           setOrganizationId((profile.organization_id as string) ?? '')
+          setEmailNotifications((profile.email_notifications as boolean) ?? true)
+          setSmsNotifications((profile.sms_notifications as boolean) ?? true)
         } else {
           // Fall back to auth metadata for email
           const { data: { user } } = await supabase.auth.getUser()
@@ -193,6 +197,8 @@ export default function ProfilePage() {
           reference_2: reference2,
           hide_personal_info_from_profile: hidePersonalInfo,
           organization_id: organizationId || null,
+          email_notifications: emailNotifications,
+          sms_notifications: smsNotifications,
         }),
       })
       if (!res.ok) {
@@ -493,6 +499,37 @@ export default function ProfilePage() {
                     ))}
                   </select>
                 </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-5">
+              <h3 className="font-semibold text-[#1A1A1A] mb-4">Notification Preferences</h3>
+              <div className="space-y-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={emailNotifications}
+                    onChange={(e) => setEmailNotifications(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-brand-maroon focus:ring-brand-maroon"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-[#1A1A1A]">Email Notifications</span>
+                    <p className="text-xs text-[#888888]">Receive email alerts for approvals, matches, and status changes</p>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={smsNotifications}
+                    onChange={(e) => setSmsNotifications(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-brand-maroon focus:ring-brand-maroon"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-[#1A1A1A]">SMS Notifications</span>
+                    <p className="text-xs text-[#888888]">Receive text message alerts for important updates (requires phone number on profile)</p>
+                  </div>
+                </label>
               </div>
             </div>
           </div>

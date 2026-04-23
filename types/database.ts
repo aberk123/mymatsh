@@ -56,6 +56,8 @@ export interface Database {
           phone: string | null
           role: UserRole
           status: UserStatus
+          email_notifications: boolean
+          sms_notifications: boolean
           created_at: string
           updated_at: string
         }

@@ -4,6 +4,9 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { type Database } from '@/types/database'
 import { createNotification } from '@/lib/utils/notifications'
+import { sendEmail } from '@/lib/utils/send-email'
+import { sendSms } from '@/lib/utils/send-sms'
+import { emailTemplate } from '@/lib/utils/email-template'
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   const cookieStore = await cookies()
@@ -41,18 +44,17 @@ export async function POST(_request: Request, { params }: { params: { id: string
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  // Fetch the profile to get the linked user_id
+  // Fetch profile including contact fields needed for notifications
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile, error: fetchError } = await (adminClient.from('shadchan_profiles') as any)
-    .select('user_id')
+    .select('user_id, phone, email, full_name')
     .eq('id', params.id)
-    .maybeSingle() as { data: { user_id: string } | null; error: unknown }
+    .maybeSingle() as { data: { user_id: string; phone: string | null; email: string | null; full_name: string } | null; error: unknown }
 
   if (fetchError || !profile) {
     return NextResponse.json({ error: 'Shadchan profile not found' }, { status: 404 })
   }
 
-  // Approve the shadchan profile
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: profileError } = await (adminClient.from('shadchan_profiles') as any)
     .update({
@@ -66,7 +68,6 @@ export async function POST(_request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: (profileError as { message: string }).message }, { status: 500 })
   }
 
-  // Activate the user account so they can log in
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: userError } = await (adminClient.from('users') as any)
     .update({ status: 'active' })
@@ -76,10 +77,41 @@ export async function POST(_request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: (userError as { message: string }).message }, { status: 500 })
   }
 
+  // In-app notification
   await createNotification(profile.user_id, 'shadchan_approved', {
     message: 'Your shadchan application has been approved. You can now log in.',
     link: '/dashboard',
   })
+
+  // Email + SMS — fire after the main operation, never block on failure
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: userRow } = await (adminClient.from('users') as any)
+      .select('email, email_notifications, sms_notifications')
+      .eq('id', profile.user_id)
+      .maybeSingle() as { data: { email: string | null; email_notifications: boolean; sms_notifications: boolean } | null }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://mymatsh.com'
+    const toEmail = userRow?.email ?? profile.email
+    const toPhone = profile.phone
+
+    if (userRow?.email_notifications !== false && toEmail) {
+      const html = emailTemplate(
+        `<p>Shalom ${profile.full_name || 'there'},</p>
+         <p>We are pleased to let you know that your MyMatSH shadchan application has been <strong>approved</strong>.</p>
+         <p>You can now log in to your dashboard and start managing your singles.</p>`,
+        'Go to My Dashboard',
+        `${appUrl}/dashboard`
+      )
+      await sendEmail(toEmail, 'Welcome to MyMatSH — Your Application is Approved', html)
+    }
+
+    if (userRow?.sms_notifications !== false && toPhone) {
+      await sendSms(toPhone, `MyMatSH: Your shadchan application has been approved! Log in at ${appUrl}`)
+    }
+  } catch (err) {
+    console.error('[approve-shadchan] notification delivery error:', err)
+  }
 
   return NextResponse.json({ ok: true })
 }
