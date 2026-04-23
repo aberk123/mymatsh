@@ -4,6 +4,248 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { type Database } from '@/types/database'
 
+export async function GET(request: Request) {
+  const cookieStore = await cookies()
+  const callerClient = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
+          } catch { /* ignore */ }
+        },
+      },
+    }
+  )
+
+  const { data: { user } } = await callerClient.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: callerRow } = await callerClient
+    .from('users')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  const role = (callerRow as { role: string } | null)?.role
+  if (role !== 'shadchan' && role !== 'platform_admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const adminClient = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  const { searchParams } = new URL(request.url)
+  const tab = searchParams.get('tab') ?? 'mine'
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
+  const perPage = Math.min(100, Math.max(1, parseInt(searchParams.get('per_page') ?? '20', 10)))
+  const search = (searchParams.get('search') ?? '').trim()
+  const genderParam = searchParams.get('gender') ?? ''
+  const hashkafa = searchParams.get('hashkafa') ?? ''
+  const statusParam = searchParams.get('status') ?? ''
+  const labelFilter = searchParams.get('label') ?? ''
+  const ageMin = searchParams.get('age_min') ? parseInt(searchParams.get('age_min')!, 10) : null
+  const ageMax = searchParams.get('age_max') ? parseInt(searchParams.get('age_max')!, 10) : null
+  const heightMin = searchParams.get('height_min') ? parseInt(searchParams.get('height_min')!, 10) : null
+  const heightMax = searchParams.get('height_max') ? parseInt(searchParams.get('height_max')!, 10) : null
+
+  // Get shadchan profile ID
+  let profileId: string | null = null
+  if (role === 'shadchan') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: profile } = await (adminClient.from('shadchan_profiles') as any)
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle() as { data: { id: string } | null }
+    if (!profile) return NextResponse.json({ error: 'Shadchan profile not found' }, { status: 404 })
+    profileId = profile.id
+  }
+
+  // Shadchan's label list (used for filter dropdown)
+  let labelsList: string[] = []
+  if (profileId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: labelsData } = await (adminClient.from('labels') as any)
+      .select('name')
+      .eq('shadchan_id', profileId)
+      .order('name') as { data: Array<{ name: string }> | null }
+    labelsList = (labelsData ?? []).map((l: { name: string }) => l.name)
+  }
+
+  // Resolve label filter to single_ids
+  let labelFilterIds: string[] | null = null
+  if (labelFilter && profileId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: labelRow } = await (adminClient.from('labels') as any)
+      .select('id')
+      .eq('shadchan_id', profileId)
+      .eq('name', labelFilter)
+      .maybeSingle() as { data: { id: string } | null }
+    if (labelRow) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: slData } = await (adminClient.from('single_labels') as any)
+        .select('single_id')
+        .eq('label_id', labelRow.id) as { data: Array<{ single_id: string }> | null }
+      labelFilterIds = (slData ?? []).map((sl: { single_id: string }) => sl.single_id)
+    } else {
+      labelFilterIds = []
+    }
+  }
+
+  if (labelFilterIds !== null && labelFilterIds.length === 0) {
+    return NextResponse.json({ singles: [], total: 0, page, per_page: perPage, total_pages: 0, labels_list: labelsList })
+  }
+
+  const from = (page - 1) * perPage
+  const to = from + perPage - 1
+
+  // Build base query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any
+
+  if (role === 'platform_admin') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query = (adminClient.from('singles') as any)
+      .select('id, first_name, last_name, gender, age, city, state, status, hashkafa, plans, height_inches, created_at, created_by_shadchan_id', { count: 'exact' })
+  } else if (tab === 'mine') {
+    // Union: created by this shadchan OR linked via junction table
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: junctionData } = await (adminClient.from('shadchan_singles') as any)
+      .select('single_id')
+      .eq('shadchan_id', profileId) as { data: Array<{ single_id: string }> | null }
+    const junctionIds = (junctionData ?? []).map((j: { single_id: string }) => j.single_id)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query = (adminClient.from('singles') as any)
+      .select('id, first_name, last_name, gender, age, city, state, status, hashkafa, plans, height_inches, created_at', { count: 'exact' })
+
+    if (junctionIds.length > 0) {
+      query = query.or(`created_by_shadchan_id.eq.${profileId},id.in.(${junctionIds.join(',')})`)
+    } else {
+      query = query.eq('created_by_shadchan_id', profileId)
+    }
+  } else {
+    // All available singles (shadchan 'all' tab)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query = (adminClient.from('singles') as any)
+      .select('id, first_name, last_name, gender, age, city, state, hashkafa, plans, height_inches, created_at, created_by_shadchan_id', { count: 'exact' })
+      .eq('status', 'available')
+  }
+
+  // Apply shared filters
+  if (search) {
+    query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,city.ilike.%${search}%,plans.ilike.%${search}%`)
+  }
+  if (genderParam === 'male' || genderParam === 'female') {
+    query = query.eq('gender', genderParam)
+  }
+  if (hashkafa) {
+    query = query.eq('hashkafa', hashkafa)
+  }
+  if (statusParam && (tab === 'mine' || role === 'platform_admin')) {
+    query = query.eq('status', statusParam)
+  }
+  if (ageMin !== null && !isNaN(ageMin)) query = query.gte('age', ageMin)
+  if (ageMax !== null && !isNaN(ageMax)) query = query.lte('age', ageMax)
+  if (heightMin !== null && heightMin > 0 && !isNaN(heightMin)) query = query.gte('height_inches', heightMin)
+  if (heightMax !== null && heightMax > 0 && !isNaN(heightMax)) query = query.lte('height_inches', heightMax)
+  if (labelFilterIds !== null && labelFilterIds.length > 0) query = query.in('id', labelFilterIds)
+
+  query = tab === 'mine'
+    ? query.order('created_at', { ascending: false })
+    : query.order('first_name', { ascending: true })
+
+  query = query.range(from, to)
+
+  const { data: singlesData, count, error } = await query
+  if (error) {
+    return NextResponse.json({ error: (error as { message: string }).message }, { status: 500 })
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows: any[] = singlesData ?? []
+  const total = count ?? 0
+
+  // Resolve shadchan names for all/admin tabs
+  const shadchanMap: Record<string, string> = {}
+  if ((tab === 'all' || role === 'platform_admin') && rows.length > 0) {
+    const shadchanIds = Array.from(new Set(rows.map((s) => s.created_by_shadchan_id).filter(Boolean)))
+    if (shadchanIds.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profs } = await (adminClient.from('shadchan_profiles') as any)
+        .select('id, full_name')
+        .in('id', shadchanIds) as { data: Array<{ id: string; full_name: string }> | null }
+      for (const p of profs ?? []) shadchanMap[p.id] = p.full_name
+    }
+  }
+
+  // Attach this shadchan's labels to the returned singles
+  const labelsBySingle: Record<string, string[]> = {}
+  if (profileId && rows.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: myLabels } = await (adminClient.from('labels') as any)
+      .select('id, name')
+      .eq('shadchan_id', profileId) as { data: Array<{ id: string; name: string }> | null }
+    const labelById: Record<string, string> = {}
+    for (const l of myLabels ?? []) labelById[l.id] = l.name
+
+    if (Object.keys(labelById).length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: slData } = await (adminClient.from('single_labels') as any)
+        .select('single_id, label_id')
+        .in('single_id', rows.map((s) => s.id))
+        .in('label_id', Object.keys(labelById)) as { data: Array<{ single_id: string; label_id: string }> | null }
+      for (const sl of slData ?? []) {
+        if (!labelsBySingle[sl.single_id]) labelsBySingle[sl.single_id] = []
+        const name = labelById[sl.label_id]
+        if (name) labelsBySingle[sl.single_id].push(name)
+      }
+    }
+  }
+
+  // Representation request status (all tab only)
+  const repMap: Record<string, string> = {}
+  if (tab === 'all' && profileId && rows.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: repData } = await (adminClient.from('representation_requests') as any)
+      .select('single_id, status')
+      .eq('shadchan_id', profileId)
+      .in('single_id', rows.map((s) => s.id)) as { data: Array<{ single_id: string; status: string }> | null }
+    for (const r of repData ?? []) repMap[r.single_id] = r.status
+  }
+
+  return NextResponse.json({
+    singles: rows.map((s) => ({
+      id: s.id,
+      first_name: s.first_name,
+      last_name: s.last_name,
+      gender: s.gender,
+      age: s.age,
+      city: s.city,
+      state: s.state,
+      status: s.status ?? null,
+      hashkafa: s.hashkafa,
+      plans: s.plans,
+      height_inches: s.height_inches,
+      created_at: s.created_at,
+      shadchan_name: shadchanMap[s.created_by_shadchan_id] ?? '—',
+      labels: labelsBySingle[s.id] ?? [],
+      rep_status: repMap[s.id] ?? null,
+    })),
+    total,
+    page,
+    per_page: perPage,
+    total_pages: Math.ceil(total / perPage),
+    labels_list: labelsList,
+  })
+}
+
 interface SingleForDupCheck {
   id: string
   first_name: string

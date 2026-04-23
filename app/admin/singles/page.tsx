@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -25,6 +25,7 @@ import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Pagination } from '@/components/ui/pagination'
 import {
   Dialog,
   DialogContent,
@@ -33,7 +34,6 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { NavItem } from '@/components/ui/sidebar'
-import { createClient } from '@/lib/supabase/client'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -62,6 +62,8 @@ const STATUS_OPTIONS: { value: SingleStatus; label: string }[] = [
   { value: 'inactive', label: 'Inactive' },
 ]
 
+const PAGE_SIZE = 25
+
 interface SingleRow {
   id: string
   first_name: string
@@ -71,60 +73,70 @@ interface SingleRow {
   city: string | null
   state: string | null
   status: string
-  created_by_shadchan_id: string
-  shadchanName?: string
+  shadchan_name: string
 }
 
 export default function AdminSinglesPage() {
   const router = useRouter()
   const [gender, setGender] = useState<Gender>('boys')
-  const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [searchInput, setSearchInput] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [loading, setLoading] = useState(false)
   const [singles, setSingles] = useState<SingleRow[]>([])
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [genderTotals, setGenderTotals] = useState<{ boys: number | null; girls: number | null }>({ boys: null, girls: null })
   const [statusModalId, setStatusModalId] = useState<string | null>(null)
   const [newStatus, setNewStatus] = useState<SingleStatus>('available')
   const [statusSaving, setStatusSaving] = useState(false)
   const [statusError, setStatusError] = useState('')
 
+  // Debounce search
   useEffect(() => {
-    loadData()
+    const timer = setTimeout(() => setDebouncedSearch(searchInput), 300)
+    return () => clearTimeout(timer)
+  }, [searchInput])
+
+  // Fetch initial counts for both gender tabs
+  useEffect(() => {
+    fetch('/api/singles?gender=male&page=1&per_page=1')
+      .then(r => r.json())
+      .then(d => setGenderTotals(prev => ({ ...prev, boys: d.total ?? 0 })))
+    fetch('/api/singles?gender=female&page=1&per_page=1')
+      .then(r => r.json())
+      .then(d => setGenderTotals(prev => ({ ...prev, girls: d.total ?? 0 })))
   }, [])
 
-  async function loadData() {
+  // Main data fetch
+  const fetchRef = useRef(0)
+  useEffect(() => {
+    const fetchId = ++fetchRef.current
     setLoading(true)
-    const supabase = createClient()
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: rows } = await (supabase.from('singles') as any)
-      .select('id, first_name, last_name, gender, age, city, state, status, created_by_shadchan_id')
-      .order('first_name', { ascending: true }) as { data: SingleRow[] | null }
+    const params = new URLSearchParams({
+      gender: gender === 'boys' ? 'male' : 'female',
+      page: String(page),
+      per_page: String(PAGE_SIZE),
+    })
+    if (debouncedSearch) params.set('search', debouncedSearch)
 
-    const all = rows ?? []
+    fetch(`/api/singles?${params}`)
+      .then(r => r.json())
+      .then(data => {
+        if (fetchRef.current !== fetchId) return
+        setSingles(data.singles ?? [])
+        setTotal(data.total ?? 0)
+      })
+      .catch(() => { /* ignore */ })
+      .finally(() => {
+        if (fetchRef.current === fetchId) setLoading(false)
+      })
+  }, [gender, debouncedSearch, page])
 
-    // Resolve shadchan names
-    const shadchanIds = Array.from(new Set(all.map((s) => s.created_by_shadchan_id).filter(Boolean)))
-    let shadchanMap: Record<string, string> = {}
-    if (shadchanIds.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: profiles } = await (supabase.from('shadchan_profiles') as any)
-        .select('id, full_name')
-        .in('id', shadchanIds) as { data: Array<{ id: string; full_name: string }> | null }
-      shadchanMap = Object.fromEntries((profiles ?? []).map((p) => [p.id, p.full_name]))
-    }
-
-    setSingles(all.map((s) => ({ ...s, shadchanName: shadchanMap[s.created_by_shadchan_id] ?? '—' })))
-    setLoading(false)
+  function switchGender(g: Gender) {
+    setGender(g)
+    setPage(1)
   }
-
-  const filtered = singles.filter(
-    (s) =>
-      (s.gender === 'male' ? gender === 'boys' : gender === 'girls') &&
-      (`${s.first_name} ${s.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
-        (s.city ?? '').toLowerCase().includes(search.toLowerCase()))
-  )
-
-  const boysCount = singles.filter((s) => s.gender === 'male').length
-  const girlsCount = singles.filter((s) => s.gender === 'female').length
 
   const updating = singles.find((s) => s.id === statusModalId)
 
@@ -172,11 +184,11 @@ export default function AdminSinglesPage() {
               ? 'border-brand-pink text-brand-pink'
               : 'border-transparent text-[#888888] hover:text-[#555555]'
           }`}
-          onClick={() => setGender('boys')}
+          onClick={() => switchGender('boys')}
         >
           Boys
           <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {boysCount}
+            {genderTotals.boys !== null ? genderTotals.boys : '…'}
           </span>
         </button>
         <button
@@ -185,11 +197,11 @@ export default function AdminSinglesPage() {
               ? 'border-brand-pink text-brand-pink'
               : 'border-transparent text-[#888888] hover:text-[#555555]'
           }`}
-          onClick={() => setGender('girls')}
+          onClick={() => switchGender('girls')}
         >
           Girls
           <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {girlsCount}
+            {genderTotals.girls !== null ? genderTotals.girls : '…'}
           </span>
         </button>
       </div>
@@ -201,8 +213,8 @@ export default function AdminSinglesPage() {
             <Input
               placeholder="Search singles..."
               className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => { setSearchInput(e.target.value); setPage(1) }}
             />
           </div>
           <Button
@@ -219,49 +231,60 @@ export default function AdminSinglesPage() {
         {loading ? (
           <div className="flex items-center justify-center py-12 text-[#888888] text-sm">Loading…</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr>
-                  <th className="table-th">Name</th>
-                  <th className="table-th">Age</th>
-                  <th className="table-th">City</th>
-                  <th className="table-th">Shadchan</th>
-                  <th className="table-th">Status</th>
-                  <th className="table-th">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((s) => (
-                  <tr key={s.id} className="table-row">
-                    <td className="table-td font-medium text-[#1A1A1A]">{s.first_name} {s.last_name}</td>
-                    <td className="table-td text-[#555555]">{s.age ?? '—'}</td>
-                    <td className="table-td text-[#555555]">{[s.city, s.state].filter(Boolean).join(', ') || '—'}</td>
-                    <td className="table-td text-[#555555]">{s.shadchanName}</td>
-                    <td className="table-td"><StatusBadge status={s.status} /></td>
-                    <td className="table-td">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1"
-                        onClick={() => openStatusModal(s.id)}
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        Update Status
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
                   <tr>
-                    <td colSpan={6} className="table-td text-center text-[#888888] py-8">
-                      No {gender} found.
-                    </td>
+                    <th className="table-th">Name</th>
+                    <th className="table-th">Age</th>
+                    <th className="table-th">City</th>
+                    <th className="table-th">Shadchan</th>
+                    <th className="table-th">Status</th>
+                    <th className="table-th">Actions</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {singles.map((s) => (
+                    <tr key={s.id} className="table-row">
+                      <td className="table-td font-medium text-[#1A1A1A]">{s.first_name} {s.last_name}</td>
+                      <td className="table-td text-[#555555]">{s.age ?? '—'}</td>
+                      <td className="table-td text-[#555555]">{[s.city, s.state].filter(Boolean).join(', ') || '—'}</td>
+                      <td className="table-td text-[#555555]">{s.shadchan_name}</td>
+                      <td className="table-td"><StatusBadge status={s.status} /></td>
+                      <td className="table-td">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1"
+                          onClick={() => openStatusModal(s.id)}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          Update Status
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                  {singles.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="table-td text-center text-[#888888] py-8">
+                        No {gender} found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {total > PAGE_SIZE && (
+              <Pagination
+                total={total}
+                page={page}
+                pageSize={PAGE_SIZE}
+                onPageChange={setPage}
+                className="border-t border-gray-100"
+              />
+            )}
+          </>
         )}
       </div>
 
