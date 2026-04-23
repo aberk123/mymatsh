@@ -9,7 +9,6 @@ import {
   Pencil,
   X,
   Check,
-  Lock,
   Tag,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
@@ -28,7 +27,6 @@ const navItems: NavItem[] = [
   { label: 'Messages', href: '/portal/single/messages', icon: MessageSquare, badge: '2' },
 ]
 
-// Predefined system labels singles can self-apply — used for shadchan search/discovery
 const SYSTEM_LABEL_GROUPS = [
   {
     category: 'Hashkafa',
@@ -56,6 +54,7 @@ interface Profile {
   dob: string
   age: number | null
   height_inches: number | null
+  address: string
   city: string
   state: string
   country: string
@@ -63,9 +62,10 @@ interface Profile {
   email: string
   about_bio: string
   looking_for: string
-  photo_url: null
+  plans: string
   family_background: string
   current_education: string
+  current_yeshiva_seminary: string
   occupation: string
   hashkafa: string
   eretz_yisroel: string
@@ -74,27 +74,13 @@ interface Profile {
 }
 
 const blankProfile: Profile = {
-  first_name: '',
-  last_name: '',
-  full_hebrew_name: '',
-  gender: '',
-  dob: '',
-  age: null,
-  height_inches: null,
-  city: '',
-  state: '',
-  country: '',
-  phone: '',
-  email: '',
-  about_bio: '',
-  looking_for: '',
-  photo_url: null,
-  family_background: '',
-  current_education: '',
-  occupation: '',
-  hashkafa: '',
-  eretz_yisroel: '',
-  high_schools: '',
+  first_name: '', last_name: '', full_hebrew_name: '',
+  gender: '', dob: '', age: null, height_inches: null,
+  address: '', city: '', state: '', country: '',
+  phone: '', email: '',
+  about_bio: '', looking_for: '', plans: '',
+  family_background: '', current_education: '', current_yeshiva_seminary: '',
+  occupation: '', hashkafa: '', eretz_yisroel: '', high_schools: '',
   status: 'available',
 }
 
@@ -104,15 +90,23 @@ function heightDisplay(inches: number) {
   return `${ft}'${inc}"`
 }
 
+function hsToString(val: unknown): string {
+  if (!val) return ''
+  if (typeof val === 'string') return val
+  if (Array.isArray(val)) return val.join(', ')
+  return ''
+}
+
 interface FieldRowProps {
   label: string
   value: string
   editable?: boolean
   editMode?: boolean
-  inputType?: 'input' | 'textarea'
+  inputType?: 'input' | 'textarea' | 'date' | 'number'
   fieldKey?: string
   editValues?: Record<string, string>
   onChange?: (key: string, val: string) => void
+  hint?: string
 }
 
 function FieldRow({
@@ -124,15 +118,12 @@ function FieldRow({
   fieldKey = '',
   editValues = {},
   onChange,
+  hint,
 }: FieldRowProps) {
   const isEditing = editable && editMode
-
   return (
     <div className="flex flex-col gap-1 py-3 border-b border-gray-100 last:border-0">
-      <div className="flex items-center gap-1.5">
-        <span className="field-label">{label}</span>
-        {!editable && <Lock className="h-3 w-3 text-gray-400" />}
-      </div>
+      <span className="field-label">{label}</span>
       {isEditing ? (
         inputType === 'textarea' ? (
           <Textarea
@@ -142,11 +133,15 @@ function FieldRow({
             className="input-base text-sm"
           />
         ) : (
-          <Input
-            value={editValues[fieldKey] ?? value}
-            onChange={(e) => onChange?.(fieldKey, e.target.value)}
-            className="input-base"
-          />
+          <>
+            <Input
+              type={inputType === 'date' ? 'date' : inputType === 'number' ? 'number' : 'text'}
+              value={editValues[fieldKey] ?? value}
+              onChange={(e) => onChange?.(fieldKey, e.target.value)}
+              className="input-base"
+            />
+            {hint && <p className="text-xs text-[#888888] mt-0.5">{hint}</p>}
+          </>
         )
       ) : (
         <p className="text-sm text-[#1A1A1A]">{value || '—'}</p>
@@ -163,13 +158,15 @@ export default function SingleProfilePage() {
   const [profile, setProfile] = useState<Profile>(blankProfile)
   const [editMode, setEditMode] = useState(false)
   const [editValues, setEditValues] = useState<Record<string, string>>({
-    phone: '',
-    email: '',
-    about_bio: '',
-    looking_for: '',
+    first_name: '', last_name: '', full_hebrew_name: '',
+    gender: '', dob: '', age: '', height_inches: '',
+    address: '', city: '', state: '', country: '',
+    phone: '', email: '',
+    about_bio: '', looking_for: '', plans: '',
+    family_background: '', current_education: '', current_yeshiva_seminary: '',
+    occupation: '', hashkafa: '', eretz_yisroel: '', high_schools: '',
   })
 
-  // Self-applied system labels — make this single discoverable by shadchanim
   const [selfLabels, setSelfLabels] = useState<string[]>([])
   const [labelsEditMode, setLabelsEditMode] = useState(false)
   const [labelSearch, setLabelSearch] = useState('')
@@ -178,7 +175,6 @@ export default function SingleProfilePage() {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (user) {
-        // Fetch the singles record owned by this user
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: single } = await (supabase.from('singles') as any)
           .select('*')
@@ -187,6 +183,7 @@ export default function SingleProfilePage() {
 
         if (single) {
           setSingleId(single.id)
+          const hs = hsToString(single.high_schools)
           setProfile({
             first_name: single.first_name ?? '',
             last_name: single.last_name ?? '',
@@ -195,6 +192,7 @@ export default function SingleProfilePage() {
             dob: single.dob ?? '',
             age: single.age ?? null,
             height_inches: single.height_inches ?? null,
+            address: single.address ?? '',
             city: single.city ?? '',
             state: single.state ?? '',
             country: single.country ?? '',
@@ -202,37 +200,50 @@ export default function SingleProfilePage() {
             email: single.email ?? user.email ?? '',
             about_bio: single.about_bio ?? '',
             looking_for: single.looking_for ?? '',
-            photo_url: null,
+            plans: single.plans ?? '',
             family_background: single.family_background ?? '',
             current_education: single.current_education ?? '',
+            current_yeshiva_seminary: single.current_yeshiva_seminary ?? '',
             occupation: single.occupation ?? '',
             hashkafa: single.hashkafa ?? '',
             eretz_yisroel: single.eretz_yisroel ?? '',
-            high_schools: single.high_schools ?? '',
+            high_schools: hs,
             status: single.status ?? 'available',
           })
           setEditValues({
+            first_name: single.first_name ?? '',
+            last_name: single.last_name ?? '',
+            full_hebrew_name: single.full_hebrew_name ?? '',
+            gender: single.gender ?? '',
+            dob: single.dob ?? '',
+            age: single.age != null ? String(single.age) : '',
+            height_inches: single.height_inches != null ? String(single.height_inches) : '',
+            address: single.address ?? '',
+            city: single.city ?? '',
+            state: single.state ?? '',
+            country: single.country ?? '',
             phone: single.phone ?? user.phone ?? '',
             email: single.email ?? user.email ?? '',
             about_bio: single.about_bio ?? '',
             looking_for: single.looking_for ?? '',
+            plans: single.plans ?? '',
+            family_background: single.family_background ?? '',
+            current_education: single.current_education ?? '',
+            current_yeshiva_seminary: single.current_yeshiva_seminary ?? '',
+            occupation: single.occupation ?? '',
+            hashkafa: single.hashkafa ?? '',
+            eretz_yisroel: single.eretz_yisroel ?? '',
+            high_schools: hs,
           })
-          if (Array.isArray(single.self_labels)) {
-            setSelfLabels(single.self_labels)
-          }
+          if (Array.isArray(single.self_labels)) setSelfLabels(single.self_labels)
         } else {
-          // No singles record yet — pre-fill from auth metadata
           const meta = user.user_metadata ?? {}
           const email = user.email ?? ''
           const phone = user.phone ?? ''
-          setProfile((p) => ({
-            ...p,
-            first_name: (meta.first_name as string) ?? '',
-            last_name: (meta.last_name as string) ?? '',
-            email,
-            phone,
-          }))
-          setEditValues({ phone, email, about_bio: '', looking_for: '' })
+          const first_name = (meta.first_name as string) ?? ''
+          const last_name = (meta.last_name as string) ?? ''
+          setProfile(p => ({ ...p, first_name, last_name, email, phone }))
+          setEditValues(v => ({ ...v, first_name, last_name, email, phone }))
         }
       }
       setLoading(false)
@@ -240,7 +251,7 @@ export default function SingleProfilePage() {
   }, [])
 
   function handleChange(key: string, val: string) {
-    setEditValues((prev) => ({ ...prev, [key]: val }))
+    setEditValues(prev => ({ ...prev, [key]: val }))
   }
 
   async function handleSave() {
@@ -251,17 +262,38 @@ export default function SingleProfilePage() {
     setSaving(true)
     setSaveError('')
     try {
+      const payload: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(editValues)) {
+        if (k === 'height_inches') {
+          payload.height_inches = v !== '' ? (parseInt(v, 10) || null) : null
+        } else if (k === 'age') {
+          payload.age = v !== '' ? (parseInt(v, 10) || null) : null
+        } else if (k === 'high_schools') {
+          payload.high_schools = v.trim()
+            ? v.split(',').map(s => s.trim()).filter(Boolean)
+            : null
+        } else {
+          payload[k] = v !== '' ? v : null
+        }
+      }
+
       const res = await fetch(`/api/singles/${singleId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editValues),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const json = await res.json()
         setSaveError(json.error ?? 'Failed to save. Please try again.')
         return
       }
-      setProfile((p) => ({ ...p, ...editValues }))
+      setProfile(p => ({
+        ...p,
+        ...(editValues as unknown as Partial<Profile>),
+        height_inches: payload.height_inches as number | null,
+        age: payload.age as number | null,
+        high_schools: editValues.high_schools,
+      }))
       setEditMode(false)
     } catch {
       setSaveError('Network error. Please try again.')
@@ -271,8 +303,8 @@ export default function SingleProfilePage() {
   }
 
   function toggleSelfLabel(label: string) {
-    setSelfLabels((prev) =>
-      prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label]
+    setSelfLabels(prev =>
+      prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
     )
   }
 
@@ -291,12 +323,14 @@ export default function SingleProfilePage() {
   const displayName = [profile.first_name, profile.last_name].filter(Boolean).join(' ') || 'Your Name'
   const displayLocation = [profile.city, profile.state].filter(Boolean).join(', ')
 
-  const filteredLabels = SYSTEM_LABEL_GROUPS.map((group) => ({
+  const filteredLabels = SYSTEM_LABEL_GROUPS.map(group => ({
     ...group,
-    labels: group.labels.filter((l) =>
+    labels: group.labels.filter(l =>
       !labelSearch || l.toLowerCase().includes(labelSearch.toLowerCase())
     ),
-  })).filter((group) => group.labels.length > 0)
+  })).filter(group => group.labels.length > 0)
+
+  const fieldProps = { editMode, editValues, onChange: handleChange }
 
   if (loading) {
     return (
@@ -315,9 +349,7 @@ export default function SingleProfilePage() {
           <div>
             <h2 className="text-xl font-bold text-[#1A1A1A]">{displayName}</h2>
             {displayLocation && <p className="text-sm text-[#555555]">{displayLocation}</p>}
-            <div className="mt-1">
-              <StatusBadge status={profile.status} />
-            </div>
+            <div className="mt-1"><StatusBadge status={profile.status} /></div>
           </div>
         </div>
         <div className="flex gap-2">
@@ -344,85 +376,59 @@ export default function SingleProfilePage() {
         </div>
       )}
 
-      {editMode && (
-        <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-100 text-sm text-blue-700">
-          You can edit your contact details and personal descriptions. Other fields are managed by your Shadchan.
-        </div>
-      )}
-
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Personal Information */}
         <div className="card">
           <h3 className="font-semibold text-[#1A1A1A] mb-2">Personal Information</h3>
-          <FieldRow label="Full Name" value={displayName} />
-          <FieldRow label="Hebrew Name" value={profile.full_hebrew_name} />
-          <FieldRow label="Gender" value={profile.gender} />
-          <FieldRow label="Date of Birth" value={profile.dob} />
-          <FieldRow label="Age" value={profile.age != null ? String(profile.age) : ''} />
-          <FieldRow label="Height" value={profile.height_inches ? heightDisplay(profile.height_inches) : ''} />
-          <FieldRow label="City" value={displayLocation} />
+          <FieldRow label="First Name" value={editValues.first_name || profile.first_name} editable fieldKey="first_name" {...fieldProps} />
+          <FieldRow label="Last Name" value={editValues.last_name || profile.last_name} editable fieldKey="last_name" {...fieldProps} />
+          <FieldRow label="Hebrew Name" value={editValues.full_hebrew_name || profile.full_hebrew_name} editable fieldKey="full_hebrew_name" {...fieldProps} />
+          <FieldRow label="Gender" value={editValues.gender || profile.gender} editable fieldKey="gender" {...fieldProps} />
+          <FieldRow label="Date of Birth" value={editValues.dob || profile.dob} editable inputType="date" fieldKey="dob" {...fieldProps} />
+          <FieldRow label="Age" value={editValues.age || (profile.age != null ? String(profile.age) : '')} editable inputType="number" fieldKey="age" {...fieldProps} />
           <FieldRow
-            label="Phone"
-            value={editValues.phone || profile.phone}
+            label="Height"
+            value={profile.height_inches ? heightDisplay(profile.height_inches) : ''}
             editable
-            editMode={editMode}
-            fieldKey="phone"
-            editValues={editValues}
-            onChange={handleChange}
+            inputType="number"
+            fieldKey="height_inches"
+            hint={`Total inches, e.g. 70 for 5'10"`}
+            {...fieldProps}
           />
-          <FieldRow
-            label="Email"
-            value={editValues.email || profile.email}
-            editable
-            editMode={editMode}
-            fieldKey="email"
-            editValues={editValues}
-            onChange={handleChange}
-          />
+          <FieldRow label="Phone" value={editValues.phone || profile.phone} editable fieldKey="phone" {...fieldProps} />
+          <FieldRow label="Email" value={editValues.email || profile.email} editable fieldKey="email" {...fieldProps} />
+          <FieldRow label="Address" value={editValues.address || profile.address} editable fieldKey="address" {...fieldProps} />
+          <FieldRow label="City" value={editValues.city || profile.city} editable fieldKey="city" {...fieldProps} />
+          <FieldRow label="State" value={editValues.state || profile.state} editable fieldKey="state" {...fieldProps} />
+          <FieldRow label="Country" value={editValues.country || profile.country} editable fieldKey="country" {...fieldProps} />
         </div>
 
         {/* Background & Education */}
         <div className="card">
           <h3 className="font-semibold text-[#1A1A1A] mb-2">Background & Education</h3>
-          <FieldRow label="Hashkafa" value={profile.hashkafa} />
-          <FieldRow label="Family Background" value={profile.family_background} />
-          <FieldRow label="High School" value={profile.high_schools} />
-          <FieldRow label="Eretz Yisroel" value={profile.eretz_yisroel} />
-          <FieldRow label="Current Education" value={profile.current_education} />
-          <FieldRow label="Occupation" value={profile.occupation} />
+          <FieldRow label="Hashkafa" value={editValues.hashkafa || profile.hashkafa} editable fieldKey="hashkafa" {...fieldProps} />
+          <FieldRow label="Family Background" value={editValues.family_background || profile.family_background} editable inputType="textarea" fieldKey="family_background" {...fieldProps} />
+          <FieldRow label="High School(s)" value={editValues.high_schools || profile.high_schools} editable fieldKey="high_schools" hint="Comma-separated if multiple" {...fieldProps} />
+          <FieldRow label="Eretz Yisroel" value={editValues.eretz_yisroel || profile.eretz_yisroel} editable fieldKey="eretz_yisroel" {...fieldProps} />
+          <FieldRow label="Current Yeshiva / Seminary" value={editValues.current_yeshiva_seminary || profile.current_yeshiva_seminary} editable fieldKey="current_yeshiva_seminary" {...fieldProps} />
+          <FieldRow label="Current Education / Program" value={editValues.current_education || profile.current_education} editable fieldKey="current_education" {...fieldProps} />
+          <FieldRow label="Occupation" value={editValues.occupation || profile.occupation} editable fieldKey="occupation" {...fieldProps} />
         </div>
 
         {/* About Me */}
         <div className="card">
           <h3 className="font-semibold text-[#1A1A1A] mb-2">About Me</h3>
-          <FieldRow
-            label="Bio"
-            value={editValues.about_bio || profile.about_bio}
-            editable
-            editMode={editMode}
-            inputType="textarea"
-            fieldKey="about_bio"
-            editValues={editValues}
-            onChange={handleChange}
-          />
+          <FieldRow label="Bio" value={editValues.about_bio || profile.about_bio} editable inputType="textarea" fieldKey="about_bio" {...fieldProps} />
+          <FieldRow label="Plans" value={editValues.plans || profile.plans} editable inputType="textarea" fieldKey="plans" {...fieldProps} />
         </div>
 
         {/* Looking For */}
         <div className="card">
           <h3 className="font-semibold text-[#1A1A1A] mb-2">What I Am Looking For</h3>
-          <FieldRow
-            label="Looking For"
-            value={editValues.looking_for || profile.looking_for}
-            editable
-            editMode={editMode}
-            inputType="textarea"
-            fieldKey="looking_for"
-            editValues={editValues}
-            onChange={handleChange}
-          />
+          <FieldRow label="Looking For" value={editValues.looking_for || profile.looking_for} editable inputType="textarea" fieldKey="looking_for" {...fieldProps} />
         </div>
 
-        {/* My Labels — self-applied, help shadchanim discover you */}
+        {/* Labels */}
         <div className="card xl:col-span-2">
           <div className="flex items-start justify-between gap-4 mb-3">
             <div>
@@ -450,11 +456,10 @@ export default function SingleProfilePage() {
             )}
           </div>
 
-          {/* Show selected labels */}
           {!labelsEditMode && (
             <div className="flex flex-wrap gap-2">
               {selfLabels.length > 0 ? (
-                selfLabels.map((label) => (
+                selfLabels.map(label => (
                   <span key={label} className="text-xs bg-[#F8F0F5] text-brand-maroon px-3 py-1 rounded-full font-medium">
                     {label}
                   </span>
@@ -465,7 +470,6 @@ export default function SingleProfilePage() {
             </div>
           )}
 
-          {/* Label editor */}
           {labelsEditMode && (
             <div className="space-y-4">
               <Input
@@ -474,13 +478,13 @@ export default function SingleProfilePage() {
                 onChange={(e) => setLabelSearch(e.target.value)}
                 className="input-base max-w-sm"
               />
-              {filteredLabels.map((group) => (
+              {filteredLabels.map(group => (
                 <div key={group.category}>
                   <p className="text-xs font-semibold text-[#888888] uppercase tracking-wide mb-2">
                     {group.category}
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {group.labels.map((label) => {
+                    {group.labels.map(label => {
                       const selected = selfLabels.includes(label)
                       return (
                         <button
