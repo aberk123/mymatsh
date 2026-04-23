@@ -128,6 +128,15 @@ function normalizeHashkafa(raw: string): string {
   return 'other'
 }
 
+function AiBadge() {
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-yellow-700 bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 rounded-full leading-none">
+      <Sparkles className="h-2.5 w-2.5" />
+      AI
+    </span>
+  )
+}
+
 export default function NewSinglePage() {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(0)
@@ -141,6 +150,7 @@ export default function NewSinglePage() {
   const [resumeParseError, setResumeParseError] = useState('')
   const [resumeFieldsFilled, setResumeFieldsFilled] = useState(0)
   const [resumeFileName, setResumeFileName] = useState('')
+  const [aiFilledFields, setAiFilledFields] = useState<Set<string>>(new Set())
   const resumeInputRef = useRef<HTMLInputElement>(null)
 
   const {
@@ -169,6 +179,7 @@ export default function NewSinglePage() {
     setResumeFieldsFilled(0)
     setResumeFileName(file.name)
     setResumeParsing(true)
+    setAiFilledFields(new Set())
 
     try {
       const formData = new FormData()
@@ -182,12 +193,15 @@ export default function NewSinglePage() {
 
       const fields = json.fields as Record<string, unknown>
       let count = 0
+      const filled = new Set<string>()
 
       // Standard field map
       for (const [claudeKey, formKey] of Object.entries(FIELD_MAP)) {
+        if (!formKey) continue
         const val = fields[claudeKey]
         if (val && typeof val === 'string' && val.trim()) {
           setValue(formKey as keyof FormValues, val.trim() as never)
+          filled.add(formKey)
           count++
         }
       }
@@ -196,6 +210,7 @@ export default function NewSinglePage() {
       const genderVal = fields.gender
       if (genderVal === 'male' || genderVal === 'female') {
         setValue('gender', genderVal)
+        filled.add('gender')
         count++
       }
 
@@ -203,6 +218,7 @@ export default function NewSinglePage() {
       const ageVal = fields.age
       if (typeof ageVal === 'number' && ageVal > 0) {
         setValue('age', ageVal)
+        filled.add('age')
         count++
       }
 
@@ -211,6 +227,7 @@ export default function NewSinglePage() {
       if (typeof hInches === 'number' && hInches > 0) {
         setValue('height_feet', Math.floor(hInches / 12))
         setValue('height_inches_rem', hInches % 12)
+        filled.add('height_feet')
         count++
       }
 
@@ -218,6 +235,7 @@ export default function NewSinglePage() {
       const hashkafaVal = fields.hashkafa
       if (hashkafaVal && typeof hashkafaVal === 'string') {
         setValue('hashkafa', normalizeHashkafa(hashkafaVal))
+        filled.add('hashkafa')
         count++
       }
 
@@ -227,6 +245,7 @@ export default function NewSinglePage() {
       }
 
       setResumeFieldsFilled(count)
+      setAiFilledFields(filled)
     } catch {
       setResumeParseError('Network error. Please try again.')
     } finally {
@@ -448,7 +467,10 @@ export default function NewSinglePage() {
                   <h2 className="text-base font-semibold text-[#1A1A1A]">Basic Information</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label required>First Name</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label required>First Name</Label>
+                        {aiFilledFields.has('first_name') && <AiBadge />}
+                      </div>
                       <Input
                         {...register('first_name', { required: 'First name is required' })}
                         placeholder="e.g. Yosef"
@@ -456,7 +478,10 @@ export default function NewSinglePage() {
                       />
                     </div>
                     <div>
-                      <Label required>Last Name</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label required>Last Name</Label>
+                        {aiFilledFields.has('last_name') && <AiBadge />}
+                      </div>
                       <Input
                         {...register('last_name', { required: 'Last name is required' })}
                         placeholder="e.g. Goldstein"
@@ -464,7 +489,10 @@ export default function NewSinglePage() {
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <Label>Full Hebrew Name</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Full Hebrew Name</Label>
+                        {aiFilledFields.has('full_hebrew_name') && <AiBadge />}
+                      </div>
                       <Input
                         {...register('full_hebrew_name')}
                         placeholder="e.g. יוסף בן אברהם"
@@ -472,7 +500,10 @@ export default function NewSinglePage() {
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <Label required>Gender</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label required>Gender</Label>
+                        {aiFilledFields.has('gender') && <AiBadge />}
+                      </div>
                       <div className="flex gap-4 mt-1">
                         {(['male', 'female'] as const).map((g) => (
                           <label key={g} className="flex items-center gap-2 cursor-pointer">
@@ -488,11 +519,17 @@ export default function NewSinglePage() {
                       </div>
                     </div>
                     <div>
-                      <Label>Date of Birth</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Date of Birth</Label>
+                        {aiFilledFields.has('dob') && <AiBadge />}
+                      </div>
                       <Input type="date" {...register('dob')} />
                     </div>
                     <div>
-                      <Label>Age</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Age</Label>
+                        {aiFilledFields.has('age') && <AiBadge />}
+                      </div>
                       <Input
                         type="number"
                         {...register('age', { min: 18, max: 99 })}
@@ -509,11 +546,17 @@ export default function NewSinglePage() {
                   <h2 className="text-base font-semibold text-[#1A1A1A]">Contact Information</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Phone</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Phone</Label>
+                        {aiFilledFields.has('phone') && <AiBadge />}
+                      </div>
                       <Input {...register('phone')} type="tel" placeholder="(718) 555-0100" />
                     </div>
                     <div>
-                      <Label>Email</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Email</Label>
+                        {aiFilledFields.has('email') && <AiBadge />}
+                      </div>
                       <Input {...register('email')} type="email" placeholder="name@example.com" />
                     </div>
                     <div className="sm:col-span-2">
@@ -521,11 +564,17 @@ export default function NewSinglePage() {
                       <Input {...register('address')} placeholder="123 Main St, Apt 4B" />
                     </div>
                     <div>
-                      <Label>City</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>City</Label>
+                        {aiFilledFields.has('city') && <AiBadge />}
+                      </div>
                       <Input {...register('city')} placeholder="Brooklyn" />
                     </div>
                     <div>
-                      <Label>State</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>State</Label>
+                        {aiFilledFields.has('state') && <AiBadge />}
+                      </div>
                       <Input {...register('state')} placeholder="NY" />
                     </div>
                     <div>
@@ -546,7 +595,10 @@ export default function NewSinglePage() {
                   <h2 className="text-base font-semibold text-[#1A1A1A]">Physical Information</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="sm:col-span-2">
-                      <Label>Height</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Height</Label>
+                        {aiFilledFields.has('height_feet') && <AiBadge />}
+                      </div>
                       <div className="flex gap-3 mt-1">
                         <div className="flex items-center gap-2 flex-1">
                           <select
@@ -585,14 +637,20 @@ export default function NewSinglePage() {
                       />
                     </div>
                     <div>
-                      <Label>Occupation</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Occupation</Label>
+                        {aiFilledFields.has('occupation') && <AiBadge />}
+                      </div>
                       <Input
                         {...register('occupation')}
                         placeholder="e.g. Software Engineer"
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <Label>High Schools Attended</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>High Schools Attended</Label>
+                        {aiFilledFields.has('high_schools') && <AiBadge />}
+                      </div>
                       <Textarea
                         {...register('high_schools')}
                         rows={2}
@@ -600,16 +658,22 @@ export default function NewSinglePage() {
                       />
                     </div>
                     <div>
-                      <Label>Time in Eretz Yisroel</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Time in Eretz Yisroel</Label>
+                        {aiFilledFields.has('eretz_yisroel') && <AiBadge />}
+                      </div>
                       <Input
                         {...register('eretz_yisroel')}
                         placeholder="e.g. 2 years – Mir Yerushalayim"
                       />
                     </div>
                     <div>
-                      <Label>
-                        {watchedGender === 'female' ? 'Current Seminary' : 'Current Yeshiva'}
-                      </Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>
+                          {watchedGender === 'female' ? 'Current Seminary' : 'Current Yeshiva'}
+                        </Label>
+                        {aiFilledFields.has('current_yeshiva_seminary') && <AiBadge />}
+                      </div>
                       <Input
                         {...register('current_yeshiva_seminary')}
                         placeholder={watchedGender === 'female' ? 'e.g. Bais Yaakov Seminary' : 'e.g. Beis Medrash Govoha'}
@@ -625,7 +689,10 @@ export default function NewSinglePage() {
                   <h2 className="text-base font-semibold text-[#1A1A1A]">Background</h2>
                   <div className="space-y-4">
                     <div>
-                      <Label>Hashkafa</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Hashkafa</Label>
+                        {aiFilledFields.has('hashkafa') && <AiBadge />}
+                      </div>
                       <select {...register('hashkafa')} className="input-base w-full">
                         <option value="">Select…</option>
                         <option value="yeshivish">Yeshivish</option>
@@ -637,7 +704,10 @@ export default function NewSinglePage() {
                       </select>
                     </div>
                     <div>
-                      <Label>Family Background</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Family Background</Label>
+                        {aiFilledFields.has('family_background') && <AiBadge />}
+                      </div>
                       <Textarea
                         {...register('family_background')}
                         rows={4}
@@ -645,7 +715,10 @@ export default function NewSinglePage() {
                       />
                     </div>
                     <div>
-                      <Label>Siblings</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Siblings</Label>
+                        {aiFilledFields.has('siblings') && <AiBadge />}
+                      </div>
                       <Textarea
                         {...register('siblings')}
                         rows={3}
@@ -662,7 +735,10 @@ export default function NewSinglePage() {
                   <h2 className="text-base font-semibold text-[#1A1A1A]">Profile Details</h2>
                   <div className="space-y-4">
                     <div>
-                      <Label>About / Bio</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>About / Bio</Label>
+                        {aiFilledFields.has('about_bio') && <AiBadge />}
+                      </div>
                       <Textarea
                         {...register('about_bio')}
                         rows={4}
@@ -670,7 +746,10 @@ export default function NewSinglePage() {
                       />
                     </div>
                     <div>
-                      <Label>Looking For</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Looking For</Label>
+                        {aiFilledFields.has('looking_for') && <AiBadge />}
+                      </div>
                       <Textarea
                         {...register('looking_for')}
                         rows={3}
@@ -678,7 +757,10 @@ export default function NewSinglePage() {
                       />
                     </div>
                     <div>
-                      <Label>Future Plans</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label>Future Plans</Label>
+                        {aiFilledFields.has('plans') && <AiBadge />}
+                      </div>
                       <Textarea
                         {...register('plans')}
                         rows={2}

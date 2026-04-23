@@ -160,10 +160,9 @@ export async function POST(request: Request) {
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
   try {
-    // PDFs require the pdfs-2024-09-25 beta header
+    // DocumentBlockParam is part of the stable messages API in SDK ≥ 0.30
     const response = await anthropic.messages.create(
-      { model, max_tokens: maxTokens, messages: [{ role: 'user', content }] },
-      isPdf ? { headers: { 'anthropic-beta': 'pdfs-2024-09-25' } } : {}
+      { model, max_tokens: maxTokens, messages: [{ role: 'user', content }] }
     )
 
     console.log(`[parse-resume] tokens in=${response.usage.input_tokens} out=${response.usage.output_tokens} model=${model}`)
@@ -192,13 +191,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ fields, resumeUrl })
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
-      console.error(
-        `[parse-resume] Anthropic API error: status=${err.status} name=${err.name} message=${err.message}`,
-        JSON.stringify(err.error ?? '')
-      )
-    } else {
-      console.error('[parse-resume] unexpected error:', err)
+      const msg = `Anthropic API error ${err.status} (${err.name}): ${err.message}`
+      console.error(`[parse-resume] ${msg}`, JSON.stringify(err.error ?? ''))
+      return NextResponse.json({ error: msg }, { status: 500 })
     }
-    return NextResponse.json({ error: 'Resume parsing failed. Please try again.' }, { status: 500 })
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[parse-resume] unexpected error:', err)
+    return NextResponse.json({ error: `Resume parsing error: ${msg}` }, { status: 500 })
   }
 }
