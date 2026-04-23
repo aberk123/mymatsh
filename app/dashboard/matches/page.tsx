@@ -250,7 +250,7 @@ export default function MatchesPage() {
   return (
     <AppLayout navItems={navItems} title="Suggestions" role="shadchan">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <h2 className="text-2xl font-bold text-[#1A1A1A]">Suggestions</h2>
         <div className="flex items-center gap-3">
           {outerTab === 'mine' && (
@@ -274,7 +274,8 @@ export default function MatchesPage() {
           <Link href="/dashboard/matches/new">
             <Button className="btn-primary gap-2">
               <Plus className="h-4 w-4" />
-              New Suggestion
+              <span className="hidden sm:inline">New Suggestion</span>
+              <span className="sm:hidden">New</span>
             </Button>
           </Link>
         </div>
@@ -303,75 +304,99 @@ export default function MatchesPage() {
       {/* ── My Suggestions ── */}
       {outerTab === 'mine' && (
         <>
-          <div className="flex items-center gap-1 flex-wrap mb-6 bg-white rounded-xl border border-gray-200 p-1">
-            <button
-              onClick={() => setMyStatusFilter('all')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                myStatusFilter === 'all' ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
-              }`}
-            >
-              All <span className="ms-1.5 text-xs opacity-75">{myMatches.length}</span>
-            </button>
-            {ALL_STATUSES.map(status => (
+          <div className="overflow-x-auto pb-1 mb-6">
+            <div className="flex items-center gap-1 bg-white rounded-xl border border-gray-200 p-1 w-max">
               <button
-                key={status}
-                onClick={() => setMyStatusFilter(status)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  myStatusFilter === status ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
+                onClick={() => setMyStatusFilter('all')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                  myStatusFilter === 'all' ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
                 }`}
               >
-                {statusLabels[status]}
-                <span className="ms-1.5 text-xs opacity-75">
-                  {myMatches.filter(m => m.status === status).length}
-                </span>
+                All <span className="ms-1.5 text-xs opacity-75">{myMatches.length}</span>
               </button>
-            ))}
+              {ALL_STATUSES.map(status => (
+                <button
+                  key={status}
+                  onClick={() => setMyStatusFilter(status)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    myStatusFilter === status ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
+                  }`}
+                >
+                  {statusLabels[status]}
+                  <span className="ms-1.5 text-xs opacity-75">
+                    {myMatches.filter(m => m.status === status).length}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {myLoading ? (
             <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
           ) : view === 'table' ? (
-            <div className="card overflow-hidden p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="table-th">Couple</th>
-                      <th className="table-th">Status</th>
-                      <th className="table-th">Date Created</th>
-                      <th className="table-th">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredMine.length === 0 ? (
+            <>
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-3">
+                {filteredMine.length === 0 ? (
+                  <p className="text-sm text-[#888888] text-center py-8">No suggestions found.</p>
+                ) : (
+                  filteredMine.map(match => (
+                    <Link key={match.id} href={`/dashboard/matches/${match.id}`} className="block p-3 rounded-xl border border-gray-100 hover:border-brand-maroon/30 hover:bg-[#FBF5F9] transition-colors bg-white">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-[#1A1A1A]">{match.boyName}</p>
+                          <p className="text-xs text-brand-pink mt-0.5">+ {match.girlName}</p>
+                          <p className="text-xs text-[#AAAAAA] mt-1">{match.createdAt}</p>
+                        </div>
+                        <StatusBadge status={match.status} />
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden md:block card overflow-hidden p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
                       <tr>
-                        <td colSpan={4} className="table-td text-center text-[#888888] py-10">
-                          No suggestions found.
-                        </td>
+                        <th className="table-th">Couple</th>
+                        <th className="table-th">Status</th>
+                        <th className="table-th">Date Created</th>
+                        <th className="table-th">Actions</th>
                       </tr>
-                    ) : (
-                      filteredMine.map(match => (
-                        <tr key={match.id} className="table-row">
-                          <td className="table-td">
-                            <div className="font-medium text-[#1A1A1A]">{match.boyName}</div>
-                            <div className="text-xs text-[#888888] mt-0.5">+ {match.girlName}</div>
-                          </td>
-                          <td className="table-td"><StatusBadge status={match.status} /></td>
-                          <td className="table-td text-[#555555]">{match.createdAt}</td>
-                          <td className="table-td">
-                            <Link href={`/dashboard/matches/${match.id}`}>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
-                            </Link>
+                    </thead>
+                    <tbody>
+                      {filteredMine.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="table-td text-center text-[#888888] py-10">
+                            No suggestions found.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredMine.map(match => (
+                          <tr key={match.id} className="table-row">
+                            <td className="table-td">
+                              <div className="font-medium text-[#1A1A1A]">{match.boyName}</div>
+                              <div className="text-xs text-[#888888] mt-0.5">+ {match.girlName}</div>
+                            </td>
+                            <td className="table-td"><StatusBadge status={match.status} /></td>
+                            <td className="table-td text-[#555555]">{match.createdAt}</td>
+                            <td className="table-td">
+                              <Link href={`/dashboard/matches/${match.id}`}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
+                                  <Eye className="h-3.5 w-3.5" />
+                                </Button>
+                              </Link>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            </>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
               {ALL_STATUSES.map(status => {
@@ -416,94 +441,136 @@ export default function MatchesPage() {
             Suggestions made by other shadchanim that involve your singles.
           </div>
 
-          <div className="flex items-center gap-1 flex-wrap mb-6 bg-white rounded-xl border border-gray-200 p-1">
-            <button
-              onClick={() => setAllStatusFilter('all')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                allStatusFilter === 'all' ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
-              }`}
-            >
-              All <span className="ms-1.5 text-xs opacity-75">{allMatches.length}</span>
-            </button>
-            {ALL_STATUSES.map(status => (
+          <div className="overflow-x-auto pb-1 mb-6">
+            <div className="flex items-center gap-1 bg-white rounded-xl border border-gray-200 p-1 w-max">
               <button
-                key={status}
-                onClick={() => setAllStatusFilter(status)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  allStatusFilter === status ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
+                onClick={() => setAllStatusFilter('all')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                  allStatusFilter === 'all' ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
                 }`}
               >
-                {statusLabels[status]}
-                <span className="ms-1.5 text-xs opacity-75">
-                  {allMatches.filter(m => m.status === status).length}
-                </span>
+                All <span className="ms-1.5 text-xs opacity-75">{allMatches.length}</span>
               </button>
-            ))}
+              {ALL_STATUSES.map(status => (
+                <button
+                  key={status}
+                  onClick={() => setAllStatusFilter(status)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    allStatusFilter === status ? 'bg-brand-maroon text-white' : 'text-[#555555] hover:bg-gray-100'
+                  }`}
+                >
+                  {statusLabels[status]}
+                  <span className="ms-1.5 text-xs opacity-75">
+                    {allMatches.filter(m => m.status === status).length}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {allLoading ? (
             <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
           ) : (
-            <div className="card overflow-hidden p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="table-th">Couple</th>
-                      <th className="table-th">Your Single</th>
-                      <th className="table-th">Status</th>
-                      <th className="table-th">Suggested By</th>
-                      <th className="table-th">Date</th>
-                      <th className="table-th">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAll.length === 0 ? (
+            <>
+              {/* Mobile cards */}
+              <div className="md:hidden space-y-3">
+                {filteredAll.length === 0 ? (
+                  <p className="text-sm text-[#888888] text-center py-8">
+                    {allMatches.length === 0
+                      ? 'No suggestions involving your singles yet.'
+                      : 'No suggestions match this filter.'}
+                  </p>
+                ) : (
+                  filteredAll.map(match => (
+                    <Link key={match.id} href={`/dashboard/matches/${match.id}`} className="block p-3 rounded-xl border border-gray-100 hover:border-brand-maroon/30 hover:bg-[#FBF5F9] transition-colors bg-white">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#1A1A1A] truncate">{match.boyName}</p>
+                          <p className="text-xs text-[#888888] mt-0.5 flex items-center gap-1 truncate">
+                            <ArrowRight className="h-3 w-3 flex-shrink-0" />
+                            {match.girlName}
+                          </p>
+                          <p className="text-xs text-[#AAAAAA] mt-1">{match.createdAt} · {match.shadchanName}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                          <StatusBadge status={match.status} />
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            match.mySide === 'both'
+                              ? 'bg-purple-100 text-purple-700'
+                              : match.mySide === 'boy'
+                                ? 'bg-blue-100 text-blue-700'
+                                : 'bg-pink-100 text-pink-700'
+                          }`}>
+                            {match.mySide === 'both' ? 'Both' : match.mySide === 'boy' ? 'Boy' : 'Girl'}
+                          </span>
+                        </div>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden md:block card overflow-hidden p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
                       <tr>
-                        <td colSpan={6} className="table-td text-center text-[#888888] py-10">
-                          {allMatches.length === 0
-                            ? 'No suggestions involving your singles yet.'
-                            : 'No suggestions match this filter.'}
-                        </td>
+                        <th className="table-th">Couple</th>
+                        <th className="table-th">Your Single</th>
+                        <th className="table-th">Status</th>
+                        <th className="table-th">Suggested By</th>
+                        <th className="table-th">Date</th>
+                        <th className="table-th">Actions</th>
                       </tr>
-                    ) : (
-                      filteredAll.map(match => (
-                        <tr key={match.id} className="table-row">
-                          <td className="table-td">
-                            <div className="font-medium text-[#1A1A1A]">{match.boyName}</div>
-                            <div className="text-xs text-[#888888] mt-0.5 flex items-center gap-1">
-                              <ArrowRight className="h-3 w-3 flex-shrink-0" />
-                              {match.girlName}
-                            </div>
-                          </td>
-                          <td className="table-td">
-                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              match.mySide === 'both'
-                                ? 'bg-purple-100 text-purple-700'
-                                : match.mySide === 'boy'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : 'bg-pink-100 text-pink-700'
-                            }`}>
-                              {match.mySide === 'both' ? 'Both' : match.mySide === 'boy' ? match.boyName : match.girlName}
-                            </span>
-                          </td>
-                          <td className="table-td"><StatusBadge status={match.status} /></td>
-                          <td className="table-td text-[#555555] text-xs">{match.shadchanName}</td>
-                          <td className="table-td text-[#555555]">{match.createdAt}</td>
-                          <td className="table-td">
-                            <Link href={`/dashboard/matches/${match.id}`}>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
-                            </Link>
+                    </thead>
+                    <tbody>
+                      {filteredAll.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="table-td text-center text-[#888888] py-10">
+                            {allMatches.length === 0
+                              ? 'No suggestions involving your singles yet.'
+                              : 'No suggestions match this filter.'}
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredAll.map(match => (
+                          <tr key={match.id} className="table-row">
+                            <td className="table-td">
+                              <div className="font-medium text-[#1A1A1A]">{match.boyName}</div>
+                              <div className="text-xs text-[#888888] mt-0.5 flex items-center gap-1">
+                                <ArrowRight className="h-3 w-3 flex-shrink-0" />
+                                {match.girlName}
+                              </div>
+                            </td>
+                            <td className="table-td">
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                match.mySide === 'both'
+                                  ? 'bg-purple-100 text-purple-700'
+                                  : match.mySide === 'boy'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-pink-100 text-pink-700'
+                              }`}>
+                                {match.mySide === 'both' ? 'Both' : match.mySide === 'boy' ? match.boyName : match.girlName}
+                              </span>
+                            </td>
+                            <td className="table-td"><StatusBadge status={match.status} /></td>
+                            <td className="table-td text-[#555555] text-xs">{match.shadchanName}</td>
+                            <td className="table-td text-[#555555]">{match.createdAt}</td>
+                            <td className="table-td">
+                              <Link href={`/dashboard/matches/${match.id}`}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
+                                  <Eye className="h-3.5 w-3.5" />
+                                </Button>
+                              </Link>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </>
       )}

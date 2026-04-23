@@ -246,7 +246,7 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <div className="flex items-center gap-1 bg-white rounded-xl border border-gray-200 p-1 mb-6 w-fit flex-wrap">
+      <div className="flex items-center gap-1 bg-white rounded-xl border border-gray-200 p-1 mb-6 overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -270,7 +270,7 @@ export default function ProfilePage() {
               Personal Information
             </h3>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <Label className="field-label">Title</Label>
                 <select className="input-base mt-1 w-full" value={title} onChange={(e) => setTitle(e.target.value)}>
@@ -287,7 +287,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <Label className="field-label">City</Label>
                 <Input className="input-base mt-1" value={city} onChange={(e) => setCity(e.target.value)} />
@@ -302,7 +302,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label className="field-label">Phone</Label>
                 <Input className="input-base mt-1" value={phone} onChange={(e) => setPhone(e.target.value)} />
@@ -330,7 +330,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label className="field-label">Years Experience</Label>
                 <select className="input-base mt-1 w-full" value={yearsExperience} onChange={(e) => setYearsExperience(e.target.value)}>
@@ -535,8 +535,17 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <div className="mt-4 flex justify-end">
+        {/* Desktop save button */}
+        <div className="mt-4 hidden sm:flex justify-end">
           <Button onClick={handleSave} className="btn-primary gap-2" disabled={saving}>
+            <Save className="h-4 w-4" />
+            {saving ? 'Saving…' : 'Save Profile'}
+          </Button>
+        </div>
+
+        {/* Mobile sticky save bar */}
+        <div className="sm:hidden fixed bottom-16 inset-x-0 z-10 bg-white border-t border-gray-100 px-4 py-3">
+          <Button onClick={handleSave} className="btn-primary gap-2 w-full" disabled={saving}>
             <Save className="h-4 w-4" />
             {saving ? 'Saving…' : 'Save Profile'}
           </Button>

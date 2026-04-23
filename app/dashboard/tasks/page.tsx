@@ -397,8 +397,8 @@ export default function TasksPage() {
             </div>
           </div>
 
-          {/* Right panel: Calendar */}
-          <div className="xl:flex-1">
+          {/* Right panel: Calendar — hidden on mobile */}
+          <div className="hidden xl:block xl:flex-1">
             <div className="card">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-[#1A1A1A]">{monthName}</h3>
@@ -451,6 +451,15 @@ export default function TasksPage() {
           </div>
         </div>
       )}
+
+      {/* Mobile FAB */}
+      <button
+        onClick={() => setDialogOpen(true)}
+        className="xl:hidden fixed bottom-20 end-4 z-20 w-14 h-14 bg-brand-maroon text-white rounded-full shadow-lg flex items-center justify-center hover:bg-brand-maroon/90 transition-colors"
+        aria-label="Add task"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
     </AppLayout>
   )
 }

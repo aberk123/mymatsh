@@ -128,7 +128,7 @@ type Tab = 'profile' | 'matches' | 'tasks' | 'notes'
 function FieldRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex gap-3 py-2 border-b border-gray-50 last:border-0">
-      <span className="text-xs text-[#888888] w-40 flex-shrink-0 pt-0.5">{label}</span>
+      <span className="text-xs text-[#888888] w-28 sm:w-40 flex-shrink-0 pt-0.5">{label}</span>
       <span className="text-sm text-[#1A1A1A]">{value || '—'}</span>
     </div>
   )
@@ -403,7 +403,7 @@ export default function SingleProfilePage() {
                   <StatusBadge status={single.status} />
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="hidden sm:flex items-center gap-2 flex-wrap">
                 <Link href="/dashboard/matches">
                   <Button variant="pink" size="sm" className="gap-2">
                     <Heart className="h-3.5 w-3.5" />
@@ -432,12 +432,12 @@ export default function SingleProfilePage() {
       </div>
 
       <div className="card p-0 overflow-hidden">
-        <div className="flex border-b border-gray-100">
+        <div className="flex border-b border-gray-100 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors flex-shrink-0 ${
                 activeTab === tab.key
                   ? 'border-brand-pink text-brand-pink'
                   : 'border-transparent text-[#888888] hover:text-[#555555]'
@@ -544,30 +544,54 @@ export default function SingleProfilePage() {
               {matches.length === 0 ? (
                 <p className="text-sm text-[#888888] py-4">No matches yet.</p>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="table-th">Name</th>
-                      <th className="table-th">Status</th>
-                      <th className="table-th">City</th>
-                      <th className="table-th">Date Suggested</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <>
+                  {/* Mobile cards */}
+                  <div className="md:hidden space-y-3">
                     {matches.map((match) => (
-                      <tr key={match.id} className="table-row">
-                        <td className="table-td font-medium text-[#1A1A1A]">{match.otherName}</td>
-                        <td className="table-td"><StatusBadge status={match.status} /></td>
-                        <td className="table-td text-[#555555]">{match.otherCity}</td>
-                        <td className="table-td text-[#555555]">
-                          {new Date(match.created_at).toLocaleDateString('en-US', {
-                            month: 'short', day: 'numeric', year: 'numeric',
-                          })}
-                        </td>
-                      </tr>
+                      <Link key={match.id} href={`/dashboard/matches/${match.id}`} className="block p-3 rounded-xl border border-gray-100 hover:border-brand-maroon/30 hover:bg-[#FBF5F9] transition-colors">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-[#1A1A1A]">{match.otherName}</p>
+                            <p className="text-xs text-[#888888] mt-0.5">{match.otherCity}</p>
+                            <p className="text-xs text-[#AAAAAA] mt-1">
+                              {new Date(match.created_at).toLocaleDateString('en-US', {
+                                month: 'short', day: 'numeric', year: 'numeric',
+                              })}
+                            </p>
+                          </div>
+                          <StatusBadge status={match.status} />
+                        </div>
+                      </Link>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                  {/* Desktop table */}
+                  <div className="hidden md:block">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr>
+                          <th className="table-th">Name</th>
+                          <th className="table-th">Status</th>
+                          <th className="table-th">City</th>
+                          <th className="table-th">Date Suggested</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {matches.map((match) => (
+                          <tr key={match.id} className="table-row">
+                            <td className="table-td font-medium text-[#1A1A1A]">{match.otherName}</td>
+                            <td className="table-td"><StatusBadge status={match.status} /></td>
+                            <td className="table-td text-[#555555]">{match.otherCity}</td>
+                            <td className="table-td text-[#555555]">
+                              {new Date(match.created_at).toLocaleDateString('en-US', {
+                                month: 'short', day: 'numeric', year: 'numeric',
+                              })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -634,6 +658,26 @@ export default function SingleProfilePage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Mobile sticky action bar */}
+      <div className="sm:hidden fixed bottom-16 inset-x-0 z-20 bg-white border-t border-gray-200 px-4 py-3 flex items-center gap-2">
+        <Link href="/dashboard/matches" className="flex-1">
+          <Button variant="pink" size="sm" className="gap-1.5 w-full justify-center">
+            <Heart className="h-3.5 w-3.5" />
+            Match
+          </Button>
+        </Link>
+        <Link href="/dashboard/tasks" className="flex-1">
+          <Button variant="outline-maroon" size="sm" className="gap-1.5 w-full justify-center">
+            <Plus className="h-3.5 w-3.5" />
+            Task
+          </Button>
+        </Link>
+        <Button variant="secondary" size="sm" className="gap-1.5 flex-1 justify-center" onClick={() => setLabelsOpen(true)}>
+          <Tag className="h-3.5 w-3.5" />
+          Labels
+        </Button>
       </div>
 
       <Dialog open={labelsOpen} onOpenChange={(open) => { if (!open) setLabelsOpen(false) }}>

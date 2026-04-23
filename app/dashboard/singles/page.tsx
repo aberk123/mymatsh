@@ -16,6 +16,8 @@ import {
   UserPlus,
   CheckCircle,
   Clock,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
@@ -84,6 +86,7 @@ export default function SinglesPage() {
   const [tabTotals, setTabTotals] = useState<{ mine: number | null; all: number | null }>({ mine: null, all: null })
   const [labelsList, setLabelsList] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
 
   // Filters
   const [searchInput, setSearchInput] = useState('')
@@ -97,13 +100,20 @@ export default function SinglesPage() {
   const [heightMin, setHeightMin] = useState(0)
   const [heightMax, setHeightMax] = useState(0)
 
-  // Debounce search input
+  const activeFilterCount = [
+    genderFilter !== 'All',
+    !!statusFilter,
+    !!hashkafaFilter,
+    !!labelFilter,
+    !!ageMin || !!ageMax,
+    heightMin > 0 || heightMax > 0,
+  ].filter(Boolean).length
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchInput), 300)
     return () => clearTimeout(timer)
   }, [searchInput])
 
-  // Main data fetch
   const fetchRef = useRef(0)
   useEffect(() => {
     const fetchId = ++fetchRef.current
@@ -156,6 +166,18 @@ export default function SinglesPage() {
     setHeightMax(0)
   }
 
+  function clearAllFilters() {
+    setGenderFilter('All')
+    setStatusFilter('')
+    setHashkafaFilter('')
+    setLabelFilter('')
+    setAgeMin('')
+    setAgeMax('')
+    setHeightMin(0)
+    setHeightMax(0)
+    setPage(1)
+  }
+
   const handleRepresent = useCallback(async (singleId: string) => {
     const res = await fetch('/api/representation-requests', {
       method: 'POST',
@@ -167,26 +189,157 @@ export default function SinglesPage() {
     }
   }, [])
 
+  // Secondary filters panel (shared between desktop card and mobile drawer)
+  function FilterControls() {
+    return (
+      <div className="space-y-4">
+        {/* Gender */}
+        <div>
+          <p className="text-xs font-medium text-[#555555] mb-2">Gender</p>
+          <div className="flex gap-2">
+            {(['All', 'male', 'female'] as const).map(g => (
+              <button
+                key={g}
+                onClick={() => { setGenderFilter(g); setPage(1) }}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
+                  genderFilter === g
+                    ? 'bg-brand-maroon text-white border-brand-maroon'
+                    : 'border-gray-300 text-[#555555]'
+                }`}
+              >
+                {g === 'All' ? 'All' : g === 'male' ? 'Male' : 'Female'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {activeTab === 'mine' && (
+          <div>
+            <p className="text-xs font-medium text-[#555555] mb-2">Status</p>
+            <select className="input-base w-full" value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}>
+              <option value="">All Statuses</option>
+              <option value="available">Available</option>
+              <option value="draft">Draft</option>
+              <option value="on_hold">On Hold</option>
+              <option value="engaged">Engaged</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        )}
+
+        <div>
+          <p className="text-xs font-medium text-[#555555] mb-2">Hashkafa</p>
+          <select className="input-base w-full" value={hashkafaFilter}
+            onChange={(e) => { setHashkafaFilter(e.target.value); setPage(1) }}>
+            {HASHKAFA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+
+        {labelsList.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-[#555555] mb-2">Label</p>
+            <select className="input-base w-full" value={labelFilter}
+              onChange={(e) => { setLabelFilter(e.target.value); setPage(1) }}>
+              <option value="">All Labels</option>
+              {labelsList.map(label => (
+                <option key={label} value={label}>{label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs font-medium text-[#555555] mb-2">Age Range</p>
+            <div className="flex items-center gap-1.5">
+              <input type="number" placeholder="Min" className="input-base w-full text-center"
+                value={ageMin} min={16} max={99}
+                onChange={(e) => { setAgeMin(e.target.value); setPage(1) }} />
+              <span className="text-xs text-[#888888]">–</span>
+              <input type="number" placeholder="Max" className="input-base w-full text-center"
+                value={ageMax} min={16} max={99}
+                onChange={(e) => { setAgeMax(e.target.value); setPage(1) }} />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-[#555555] mb-2">Height</p>
+            <div className="flex items-center gap-1.5">
+              <select className="input-base w-full" value={heightMin}
+                onChange={(e) => { setHeightMin(parseInt(e.target.value, 10)); setPage(1) }}>
+                {HEIGHT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.value === 0 ? 'Min' : o.label}</option>
+                ))}
+              </select>
+              <span className="text-xs text-[#888888]">–</span>
+              <select className="input-base w-full" value={heightMax}
+                onChange={(e) => { setHeightMax(parseInt(e.target.value, 10)); setPage(1) }}>
+                {HEIGHT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.value === 0 ? 'Max' : o.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <AppLayout navItems={navItems} title="Singles" role="shadchan">
+      {/* Mobile filter drawer backdrop */}
+      {filterDrawerOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setFilterDrawerOpen(false)}
+        />
+      )}
+
+      {/* Mobile filter drawer */}
+      <div className={`fixed inset-x-0 bottom-16 z-50 bg-white rounded-t-2xl shadow-2xl border-t border-gray-100 transition-transform duration-300 md:hidden ${filterDrawerOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <span className="text-sm font-semibold text-[#1A1A1A]">Filters</span>
+          <div className="flex items-center gap-3">
+            {activeFilterCount > 0 && (
+              <button onClick={clearAllFilters} className="text-xs text-brand-maroon font-medium">
+                Clear all
+              </button>
+            )}
+            <button onClick={() => setFilterDrawerOpen(false)} className="p-1.5 rounded-full hover:bg-gray-100">
+              <X className="h-5 w-5 text-[#555555]" />
+            </button>
+          </div>
+        </div>
+        <div className="p-5 overflow-y-auto max-h-[70dvh]">
+          <FilterControls />
+          <Button
+            onClick={() => setFilterDrawerOpen(false)}
+            className="w-full mt-5 btn-primary min-h-[44px]"
+          >
+            Show {total} results
+          </Button>
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
         <h1 className="text-xl font-semibold text-[#1A1A1A]">Singles</h1>
         <Link href="/dashboard/singles/new">
-          <Button variant="primary" size="md" className="gap-2">
+          <Button variant="primary" size="md" className="gap-2 min-h-[44px]">
             <Plus className="h-4 w-4" />
-            Add New Single
+            <span className="hidden sm:inline">Add New Single</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </Link>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 mb-5">
+      <div className="flex gap-1 border-b border-gray-200 mb-4">
         {(['mine', 'all'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => switchTab(tab)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px] ${
               activeTab === tab
                 ? 'border-brand-maroon text-brand-maroon'
                 : 'border-transparent text-[#888888] hover:text-[#555555]'
@@ -200,36 +353,53 @@ export default function SinglesPage() {
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="card mb-5 space-y-3">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#888888]" />
-            <input
-              className="input-base ps-9 w-full"
-              placeholder="Search by name, city, or plans…"
-              value={searchInput}
-              onChange={(e) => { setSearchInput(e.target.value); setPage(1) }}
-            />
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {(['All', 'male', 'female'] as const).map(g => (
-              <button
-                key={g}
-                onClick={() => { setGenderFilter(g); setPage(1) }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
-                  genderFilter === g
-                    ? 'bg-brand-maroon text-white border-brand-maroon'
-                    : 'border-gray-300 text-[#555555] hover:bg-gray-50'
-                }`}
-              >
-                {g === 'All' ? 'All' : g === 'male' ? 'Male' : 'Female'}
-              </button>
-            ))}
-          </div>
+      {/* Search + Filter row */}
+      <div className="flex gap-2 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#888888]" />
+          <input
+            className="input-base ps-9 w-full min-h-[44px]"
+            placeholder="Search by name, city, or plans…"
+            value={searchInput}
+            onChange={(e) => { setSearchInput(e.target.value); setPage(1) }}
+          />
         </div>
+        {/* Mobile: Filters button */}
+        <button
+          onClick={() => setFilterDrawerOpen(true)}
+          className={`md:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium min-h-[44px] flex-shrink-0 ${
+            activeFilterCount > 0
+              ? 'bg-brand-maroon text-white border-brand-maroon'
+              : 'border-gray-300 text-[#555555]'
+          }`}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="bg-white/30 rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+      </div>
 
+      {/* Desktop filters */}
+      <div className="hidden md:block card mb-4">
         <div className="flex flex-wrap gap-3 items-center">
+          {(['All', 'male', 'female'] as const).map(g => (
+            <button
+              key={g}
+              onClick={() => { setGenderFilter(g); setPage(1) }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                genderFilter === g
+                  ? 'bg-brand-maroon text-white border-brand-maroon'
+                  : 'border-gray-300 text-[#555555] hover:bg-gray-50'
+              }`}
+            >
+              {g === 'All' ? 'All' : g === 'male' ? 'Male' : 'Female'}
+            </button>
+          ))}
+
           {activeTab === 'mine' && (
             <select className="input-base w-auto min-w-[140px]" value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}>
@@ -285,18 +455,90 @@ export default function SinglesPage() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="card p-0 overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-24 text-[#888888] text-sm">Loading…</div>
-        ) : (
-          <>
-            <div className="px-4 py-3 border-b border-gray-100">
-              <p className="text-xs text-[#888888]">
-                Showing <span className="font-medium text-[#555555]">{singles.length}</span> of{' '}
-                <span className="font-medium text-[#555555]">{total}</span> singles
-              </p>
-            </div>
+      {/* Results */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-[#888888] text-sm">Loading…</div>
+      ) : (
+        <>
+          <p className="text-xs text-[#888888] mb-3">
+            Showing <span className="font-medium text-[#555555]">{singles.length}</span> of{' '}
+            <span className="font-medium text-[#555555]">{total}</span> singles
+          </p>
+
+          {/* Mobile: Card list */}
+          <div className="md:hidden space-y-2">
+            {singles.length === 0 ? (
+              <div className="py-12 text-center text-[#888888] text-sm card">
+                {total === 0 ? 'No singles added yet.' : 'No singles match your filters.'}
+              </div>
+            ) : (
+              singles.map((s) => (
+                <div key={s.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0">
+                      <Link href={`/dashboard/singles/${s.id}`} className="text-base font-semibold text-[#1A1A1A] block truncate hover:text-brand-maroon">
+                        {s.first_name} {s.last_name}
+                      </Link>
+                      <p className="text-xs text-[#888888] mt-0.5 capitalize">
+                        {s.gender === 'male' ? 'Male' : 'Female'}
+                        {s.age ? ` · Age ${s.age}` : ''}
+                        {[s.city, s.state].filter(Boolean).length > 0 ? ` · ${[s.city, s.state].filter(Boolean).join(', ')}` : ''}
+                        {s.hashkafa ? ` · ${s.hashkafa.replace('_', ' ')}` : ''}
+                      </p>
+                    </div>
+                    <StatusBadge status={s.status ?? 'available'} />
+                  </div>
+                  {s.labels.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {s.labels.map(label => (
+                        <span key={label} className="text-xs bg-[#F8F0F5] text-brand-maroon px-2 py-0.5 rounded-full font-medium">
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-50">
+                    <Link href={`/dashboard/singles/${s.id}`} className="flex-1">
+                      <Button variant="ghost" size="sm" className="w-full gap-1.5 min-h-[40px]">
+                        <Eye className="h-3.5 w-3.5" />
+                        View Profile
+                      </Button>
+                    </Link>
+                    {activeTab === 'all' && (
+                      <>
+                        {s.rep_status === 'pending' && (
+                          <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" />Pending
+                          </span>
+                        )}
+                        {s.rep_status === 'accepted' && (
+                          <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full inline-flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" />Representing
+                          </span>
+                        )}
+                        {s.rep_status === 'declined' && (
+                          <span className="text-xs text-[#888888] bg-gray-100 px-2 py-1 rounded-full">Declined</span>
+                        )}
+                        {s.rep_status === null && (
+                          <Button variant="ghost" size="sm" className="gap-1.5 min-h-[40px]"
+                            onClick={() => handleRepresent(s.id)}>
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Represent
+                          </Button>
+                        )}
+                        {s.shadchan_name !== '—' && (
+                          <span className="text-xs text-[#888888] ml-auto">{s.shadchan_name}</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop: Table */}
+          <div className="hidden md:block card p-0 overflow-hidden">
             <div className="overflow-x-auto">
               {activeTab === 'mine' ? (
                 <table className="w-full text-sm">
@@ -325,21 +567,13 @@ export default function SinglesPage() {
                         </td>
                         <td className="table-td text-[#555555]">{s.gender === 'male' ? 'Male' : 'Female'}</td>
                         <td className="table-td text-[#555555]">{s.age ?? '—'}</td>
-                        <td className="table-td text-[#555555]">
-                          {[s.city, s.state].filter(Boolean).join(', ') || '—'}
-                        </td>
-                        <td className="table-td text-[#555555] capitalize">
-                          {(s.hashkafa ?? '—').replace('_', ' ')}
-                        </td>
-                        <td className="table-td">
-                          <StatusBadge status={s.status ?? 'available'} />
-                        </td>
+                        <td className="table-td text-[#555555]">{[s.city, s.state].filter(Boolean).join(', ') || '—'}</td>
+                        <td className="table-td text-[#555555] capitalize">{(s.hashkafa ?? '—').replace('_', ' ')}</td>
+                        <td className="table-td"><StatusBadge status={s.status ?? 'available'} /></td>
                         <td className="table-td">
                           <div className="flex flex-wrap gap-1">
                             {s.labels.map(label => (
-                              <span key={label} className="text-xs bg-[#F8F0F5] text-brand-maroon px-2 py-0.5 rounded-full font-medium">
-                                {label}
-                              </span>
+                              <span key={label} className="text-xs bg-[#F8F0F5] text-brand-maroon px-2 py-0.5 rounded-full font-medium">{label}</span>
                             ))}
                             {s.labels.length === 0 && <span className="text-[#BBBBBB] text-xs">—</span>}
                           </div>
@@ -349,19 +583,15 @@ export default function SinglesPage() {
                         </td>
                         <td className="table-td">
                           <Link href={`/dashboard/singles/${s.id}`}>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
-                              <Eye className="h-3.5 w-3.5" />
-                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="View"><Eye className="h-3.5 w-3.5" /></Button>
                           </Link>
                         </td>
                       </tr>
                     ))}
                     {singles.length === 0 && (
-                      <tr>
-                        <td colSpan={10} className="text-center py-12 text-[#888888] text-sm">
-                          {total === 0 ? 'No singles added yet.' : 'No singles match your filters.'}
-                        </td>
-                      </tr>
+                      <tr><td colSpan={10} className="text-center py-12 text-[#888888] text-sm">
+                        {total === 0 ? 'No singles added yet.' : 'No singles match your filters.'}
+                      </td></tr>
                     )}
                   </tbody>
                 </table>
@@ -391,19 +621,13 @@ export default function SinglesPage() {
                         </td>
                         <td className="table-td text-[#555555]">{s.gender === 'male' ? 'Male' : 'Female'}</td>
                         <td className="table-td text-[#555555]">{s.age ?? '—'}</td>
-                        <td className="table-td text-[#555555]">
-                          {[s.city, s.state].filter(Boolean).join(', ') || '—'}
-                        </td>
-                        <td className="table-td text-[#555555] capitalize">
-                          {(s.hashkafa ?? '—').replace('_', ' ')}
-                        </td>
+                        <td className="table-td text-[#555555]">{[s.city, s.state].filter(Boolean).join(', ') || '—'}</td>
+                        <td className="table-td text-[#555555] capitalize">{(s.hashkafa ?? '—').replace('_', ' ')}</td>
                         <td className="table-td text-[#555555] text-xs">{s.shadchan_name}</td>
                         <td className="table-td">
                           <div className="flex flex-wrap gap-1">
                             {s.labels.map(label => (
-                              <span key={label} className="text-xs bg-[#F8F0F5] text-brand-maroon px-2 py-0.5 rounded-full font-medium">
-                                {label}
-                              </span>
+                              <span key={label} className="text-xs bg-[#F8F0F5] text-brand-maroon px-2 py-0.5 rounded-full font-medium">{label}</span>
                             ))}
                             {s.labels.length === 0 && <span className="text-[#BBBBBB] text-xs">—</span>}
                           </div>
@@ -411,9 +635,7 @@ export default function SinglesPage() {
                         <td className="table-td">
                           <div className="flex items-center gap-1.5">
                             <Link href={`/dashboard/singles/${s.id}`}>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
-                                <Eye className="h-3.5 w-3.5" />
-                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" title="View"><Eye className="h-3.5 w-3.5" /></Button>
                             </Link>
                             {s.rep_status === 'pending' && (
                               <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
@@ -426,15 +648,11 @@ export default function SinglesPage() {
                               </span>
                             )}
                             {s.rep_status === 'declined' && (
-                              <span className="text-xs text-[#888888] bg-gray-100 px-2 py-0.5 rounded-full">
-                                Declined
-                              </span>
+                              <span className="text-xs text-[#888888] bg-gray-100 px-2 py-0.5 rounded-full">Declined</span>
                             )}
                             {s.rep_status === null && (
-                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs"
-                                onClick={() => handleRepresent(s.id)}>
-                                <UserPlus className="h-3 w-3" />
-                                Represent
+                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => handleRepresent(s.id)}>
+                                <UserPlus className="h-3 w-3" />Represent
                               </Button>
                             )}
                           </div>
@@ -442,27 +660,25 @@ export default function SinglesPage() {
                       </tr>
                     ))}
                     {singles.length === 0 && (
-                      <tr>
-                        <td colSpan={9} className="text-center py-12 text-[#888888] text-sm">
-                          No singles match your filters.
-                        </td>
-                      </tr>
+                      <tr><td colSpan={9} className="text-center py-12 text-[#888888] text-sm">No singles match your filters.</td></tr>
                     )}
                   </tbody>
                 </table>
               )}
             </div>
             {total > PAGE_SIZE && (
-              <Pagination
-                total={total}
-                page={page}
-                pageSize={PAGE_SIZE}
-                onPageChange={setPage}
-              />
+              <Pagination total={total} page={page} pageSize={PAGE_SIZE} onPageChange={setPage} />
             )}
-          </>
-        )}
-      </div>
+          </div>
+
+          {/* Mobile pagination */}
+          {total > PAGE_SIZE && (
+            <div className="md:hidden mt-3">
+              <Pagination total={total} page={page} pageSize={PAGE_SIZE} onPageChange={setPage} />
+            </div>
+          )}
+        </>
+      )}
     </AppLayout>
   )
 }

@@ -11,6 +11,7 @@ import {
   UserCircle,
   Send,
   Search,
+  ChevronLeft,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { Avatar } from '@/components/ui/avatar'
@@ -46,6 +47,8 @@ interface Conversation {
   unreadCount: number
 }
 
+type MobileView = 'list' | 'chat'
+
 export default function MessagesPage() {
   const [loading, setLoading] = useState(true)
   const [myUserId, setMyUserId] = useState('')
@@ -53,6 +56,7 @@ export default function MessagesPage() {
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [search, setSearch] = useState('')
+  const [mobileView, setMobileView] = useState<MobileView>('list')
 
   useEffect(() => {
     const supabase = createClient()
@@ -77,10 +81,8 @@ export default function MessagesPage() {
         partnerMap.get(partnerId)!.push(msg)
       }
 
-      // Resolve partner names — could be parents, singles, or admins
       const convList: Conversation[] = []
       for (const [partnerId, msgs] of Array.from(partnerMap.entries())) {
-        // Try users table for email as fallback name
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: userRow } = await (supabase.from('users') as any)
           .select('email, role')
@@ -89,7 +91,6 @@ export default function MessagesPage() {
 
         let partnerName = userRow?.email ?? 'Unknown'
 
-        // Try to get a better name based on role
         if (userRow?.role === 'parent') {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: parent } = await (supabase.from('parents') as any)
@@ -138,6 +139,7 @@ export default function MessagesPage() {
   function handleSelectConversation(partnerId: string) {
     setActivePartnerId(partnerId)
     setDraft('')
+    setMobileView('chat')
     setConversations((prev) =>
       prev.map((c) => (c.partnerId === partnerId ? { ...c, unreadCount: 0 } : c))
     )
@@ -184,8 +186,9 @@ export default function MessagesPage() {
 
   return (
     <AppLayout navItems={navItems} title="Messages" role="shadchan">
-      <div className="flex h-[calc(100vh-7rem)] gap-0 rounded-xl overflow-hidden border border-gray-200 bg-white shadow-card">
-        <div className="w-1/3 border-e border-gray-200 flex flex-col">
+      <div className="flex h-[calc(100dvh-9rem)] md:h-[calc(100vh-7rem)] gap-0 rounded-xl overflow-hidden border border-gray-200 bg-white shadow-card">
+        {/* Conversation list */}
+        <div className={`md:w-1/3 w-full border-e border-gray-200 flex flex-col ${mobileView === 'chat' ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 border-b border-gray-100">
             <div className="relative">
               <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#888888]" />
@@ -234,14 +237,22 @@ export default function MessagesPage() {
           </div>
         </div>
 
+        {/* Chat panel */}
         {activeConv && (
-          <div className="flex-1 flex flex-col">
-            <div className="px-5 py-3.5 border-b border-gray-200 flex items-center gap-3">
+          <div className={`flex-1 flex-col ${mobileView === 'list' ? 'hidden md:flex' : 'flex'}`}>
+            <div className="px-4 md:px-5 py-3.5 border-b border-gray-200 flex items-center gap-3">
+              <button
+                className="md:hidden p-1 -ms-1 text-[#555555] hover:text-brand-maroon transition-colors"
+                onClick={() => setMobileView('list')}
+                aria-label="Back to conversations"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
               <Avatar name={activeConv.partnerName} size="sm" />
               <p className="text-sm font-semibold text-[#1A1A1A]">{activeConv.partnerName}</p>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-3">
               {activeConv.messages.map((msg) => {
                 const fromMe = msg.from_user_id === myUserId
                 return (
@@ -249,7 +260,7 @@ export default function MessagesPage() {
                     {!fromMe && (
                       <Avatar name={activeConv.partnerName} size="sm" className="me-2 mt-0.5 flex-shrink-0" />
                     )}
-                    <div className="max-w-[70%]">
+                    <div className="max-w-[80%] md:max-w-[70%]">
                       <div
                         className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                           fromMe
@@ -282,7 +293,7 @@ export default function MessagesPage() {
               />
               <Button
                 onClick={handleSend}
-                className="btn-primary h-9 w-9 p-0 flex-shrink-0"
+                className="btn-primary h-10 w-10 p-0 flex-shrink-0"
                 disabled={!draft.trim()}
                 aria-label="Send"
               >

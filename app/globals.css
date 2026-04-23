@@ -10,6 +10,17 @@
     --topbar-height: 64px;
   }
 
+  /* Collapse sidebar on mobile */
+  @media (max-width: 767px) {
+    :root {
+      --sidebar-width: 0px;
+    }
+    /* Prevent iOS auto-zoom on input focus */
+    input, select, textarea {
+      font-size: 16px;
+    }
+  }
+
   * {
     box-sizing: border-box;
   }

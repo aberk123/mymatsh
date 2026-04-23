@@ -179,14 +179,14 @@ export default function DashboardPage() {
         ]}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mt-6">
         <StatCard label="My Singles" value={singlesCount} icon={Users} />
         <StatCard label="Active Suggestions" value={activeMatchesCount} icon={Heart} />
         <StatCard label="Tasks Due" value={tasksDueCount} icon={CalendarCheck} />
         <StatCard label="Unread Messages" value={unreadCount} icon={MessageSquare} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6 mt-6">
         <div className="xl:col-span-2 card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-[#1A1A1A]">Recent Singles</h3>
@@ -202,45 +202,64 @@ export default function DashboardPage() {
               <Link href="/dashboard/singles/new" className="text-brand-maroon hover:underline">Add your first single.</Link>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="table-th">Name</th>
-                    <th className="table-th">Gender</th>
-                    <th className="table-th">Age</th>
-                    <th className="table-th">Status</th>
-                    <th className="table-th">City</th>
-                    <th className="table-th">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentSingles.map((single) => (
-                    <tr key={single.id} className="table-row">
-                      <td className="table-td font-medium text-[#1A1A1A]">{single.first_name} {single.last_name}</td>
-                      <td className="table-td text-[#555555] capitalize">{single.gender}</td>
-                      <td className="table-td text-[#555555]">{single.age ?? '—'}</td>
-                      <td className="table-td"><StatusBadge status={single.status} /></td>
-                      <td className="table-td text-[#555555]">{[single.city, single.state].filter(Boolean).join(', ') || '—'}</td>
-                      <td className="table-td">
-                        <div className="flex items-center gap-1">
-                          <Link href={`/dashboard/singles/${single.id}`}>
-                            <Button variant="ghost" size="icon" className="h-7 w-7">
-                              <Eye className="h-3.5 w-3.5" />
-                            </Button>
-                          </Link>
-                          <Link href={`/dashboard/singles/${single.id}/edit`}>
-                            <Button variant="ghost" size="icon" className="h-7 w-7">
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                          </Link>
-                        </div>
-                      </td>
+            <>
+              {/* Mobile: card list */}
+              <div className="md:hidden space-y-2">
+                {recentSingles.map((single) => (
+                  <Link key={single.id} href={`/dashboard/singles/${single.id}`} className="block p-3 rounded-xl border border-gray-100 hover:border-brand-maroon/30 hover:bg-[#FBF5F9] transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#1A1A1A] truncate">{single.first_name} {single.last_name}</p>
+                        <p className="text-xs text-[#888888] mt-0.5 capitalize">
+                          {single.gender}{single.age ? ` · Age ${single.age}` : ''}{[single.city, single.state].filter(Boolean).length > 0 ? ` · ${[single.city, single.state].filter(Boolean).join(', ')}` : ''}
+                        </p>
+                      </div>
+                      <StatusBadge status={single.status} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+              {/* Desktop: table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="table-th">Name</th>
+                      <th className="table-th">Gender</th>
+                      <th className="table-th">Age</th>
+                      <th className="table-th">Status</th>
+                      <th className="table-th">City</th>
+                      <th className="table-th">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {recentSingles.map((single) => (
+                      <tr key={single.id} className="table-row">
+                        <td className="table-td font-medium text-[#1A1A1A]">{single.first_name} {single.last_name}</td>
+                        <td className="table-td text-[#555555] capitalize">{single.gender}</td>
+                        <td className="table-td text-[#555555]">{single.age ?? '—'}</td>
+                        <td className="table-td"><StatusBadge status={single.status} /></td>
+                        <td className="table-td text-[#555555]">{[single.city, single.state].filter(Boolean).join(', ') || '—'}</td>
+                        <td className="table-td">
+                          <div className="flex items-center gap-1">
+                            <Link href={`/dashboard/singles/${single.id}`}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <Eye className="h-3.5 w-3.5" />
+                              </Button>
+                            </Link>
+                            <Link href={`/dashboard/singles/${single.id}/edit`}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 
@@ -257,7 +276,7 @@ export default function DashboardPage() {
             <p className="text-sm text-[#888888] py-4 text-center">No upcoming tasks.</p>
           ) : (
             <div className="space-y-3">
-              {upcomingTasks.map((task) => (
+              {upcomingTasks.slice(0, 3).map((task) => (
                 <div key={task.id} className="flex items-start gap-3 p-3 rounded-lg bg-[#FAFAFA] border border-gray-100">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#1A1A1A] leading-snug">{task.title}</p>
@@ -268,6 +287,11 @@ export default function DashboardPage() {
                   </span>
                 </div>
               ))}
+              {upcomingTasks.length > 3 && (
+                <Link href="/dashboard/tasks" className="block text-center text-xs text-brand-maroon hover:underline pt-1">
+                  See all {upcomingTasks.length} tasks →
+                </Link>
+              )}
             </div>
           )}
           <div className="mt-4 pt-4 border-t border-gray-100">

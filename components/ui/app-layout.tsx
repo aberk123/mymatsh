@@ -1,5 +1,6 @@
 import { Sidebar, type NavItem } from './sidebar'
 import { Topbar } from './topbar'
+import { MobileBottomNav } from './mobile-bottom-nav'
 import { type UserRole } from '@/types/database'
 import { cn } from '@/lib/utils'
 
@@ -26,11 +27,12 @@ export function AppLayout({
       <Topbar title={title} role={role}>
         {topbarChildren}
       </Topbar>
+      {role === 'shadchan' && <MobileBottomNav />}
       <main
-        className={cn('pt-16 min-h-screen', className)}
+        className={cn('pt-16 min-h-screen pb-20 md:pb-0', className)}
         style={{ paddingInlineStart: 'var(--sidebar-width)' }}
       >
-        <div className="p-6">{children}</div>
+        <div className="p-4 md:p-6">{children}</div>
       </main>
     </div>
   )

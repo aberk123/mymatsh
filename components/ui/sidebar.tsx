@@ -29,7 +29,7 @@ export function Sidebar({ navItems, className }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 start-0 z-40 flex flex-col bg-white shadow-sidebar',
+        'hidden md:flex fixed inset-y-0 start-0 z-40 flex-col bg-white shadow-sidebar',
         className
       )}
       style={{ width: 'var(--sidebar-width)' }}
