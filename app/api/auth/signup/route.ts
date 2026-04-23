@@ -98,6 +98,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to save user profile' }, { status: 500 })
     }
 
+    // For shadchanim: create shadchan_profiles row so they appear in the admin pending list
+    if (role === 'shadchan') {
+      const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Unknown'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: profileError } = await (adminClient.from('shadchan_profiles') as any).insert({
+        user_id: data.user.id,
+        full_name: fullName,
+        city: city?.trim() || null,
+        state: state?.trim() || null,
+        email: email?.trim() || null,
+        phone: phone?.trim() || null,
+        years_experience: yearsExperience || null,
+        age_bracket: Array.isArray(ageBracket) ? ageBracket : [],
+        best_contact_method: Array.isArray(contactPref) ? contactPref : [],
+        best_day: Array.isArray(bestDay) ? bestDay : [],
+        best_time: bestTime || null,
+        type_of_service: expertise?.trim() || null,
+        reference_1: reference?.trim() || null,
+        is_approved: false,
+      })
+      if (profileError) {
+        // Roll back auth user and users row
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (adminClient.from('users') as any).delete().eq('id', data.user.id)
+        await adminClient.auth.admin.deleteUser(data.user.id)
+        return NextResponse.json({ error: 'Failed to create shadchan profile' }, { status: 500 })
+      }
+    }
+
     // For singles: create a linked singles record immediately so the profile page works
     if (role === 'single') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

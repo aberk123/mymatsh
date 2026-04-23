@@ -441,21 +441,6 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
                 {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="h-px flex-1 bg-gray-200" />
-                <span className="text-xs text-[#888888]">or</span>
-                <div className="h-px flex-1 bg-gray-200" />
-              </div>
-
-              <div>
-                <Label className="field-label">Phone Number</Label>
-                <Input
-                  value={simpleForm.phone}
-                  onChange={(e) => setSimple('phone', e.target.value)}
-                  placeholder="(732) 555-0100"
-                />
-              </div>
-
               <div>
                 <Label className="field-label" required>Password</Label>
                 <Input
@@ -477,6 +462,21 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
                   className={errors.confirmPassword ? 'border-red-400' : ''}
                 />
                 {errors.confirmPassword && <p className="text-xs text-red-500 mt-1">{errors.confirmPassword}</p>}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-gray-200" />
+                <span className="text-xs text-[#888888]">or</span>
+                <div className="h-px flex-1 bg-gray-200" />
+              </div>
+
+              <div>
+                <Label className="field-label">Phone Number</Label>
+                <Input
+                  value={simpleForm.phone}
+                  onChange={(e) => setSimple('phone', e.target.value)}
+                  placeholder="(732) 555-0100"
+                />
               </div>
 
               <p className="text-xs text-[#888888]">
