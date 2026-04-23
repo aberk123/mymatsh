@@ -72,16 +72,19 @@ export async function POST(request: Request) {
   let formData: FormData
   try {
     formData = await request.formData()
-  } catch {
+  } catch (err) {
+    console.error('[parse-resume] failed to parse formData:', err)
     return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
   }
 
   const file = formData.get('resume') as File | null
   if (!file) return NextResponse.json({ error: 'No resume file provided' }, { status: 400 })
 
+  console.log(`[parse-resume] received file: name="${file.name}" type="${file.type}" size=${file.size}`)
+
   if (!ALLOWED_TYPES.has(file.type)) {
     return NextResponse.json(
-      { error: 'Invalid file type. Only PDF, JPG, PNG and WebP are supported.' },
+      { error: `Invalid file type "${file.type}". Only PDF, JPG, PNG and WebP are supported.` },
       { status: 400 }
     )
   }
@@ -89,18 +92,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'File too large. Maximum size is 10 MB.' }, { status: 400 })
   }
 
-  const arrayBuffer = await file.arrayBuffer()
+  let arrayBuffer: ArrayBuffer
+  try {
+    arrayBuffer = await file.arrayBuffer()
+  } catch (err) {
+    console.error('[parse-resume] failed to read file buffer:', err)
+    return NextResponse.json({ error: 'Failed to read uploaded file.' }, { status: 500 })
+  }
+
   const base64 = Buffer.from(arrayBuffer).toString('base64')
   const isPdf = file.type === 'application/pdf'
+
+  console.log(`[parse-resume] encoded base64 length=${base64.length} isPdf=${isPdf}`)
 
   const admin = serviceClient()
 
   // Check if this authenticated user owns a singles record
-  const { data: single } = await admin
-    .from('singles')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: single } = await (admin.from('singles') as any)
     .select('id')
     .eq('user_id', user.id)
-    .maybeSingle()
+    .maybeSingle() as { data: { id: string } | null }
 
   // Upload to storage and update resume_url (only when a singles record exists)
   let resumeUrl: string | null = null
@@ -113,42 +125,55 @@ export async function POST(request: Request) {
       .upload(storagePath, arrayBuffer, { contentType: file.type, upsert: true })
 
     if (uploadError) {
-      if (process.env.NODE_ENV === 'development') console.error('[parse-resume] storage:', uploadError)
+      console.error('[parse-resume] storage upload error:', uploadError)
     } else {
       const { data: { publicUrl } } = admin.storage.from(BUCKET).getPublicUrl(storagePath)
       resumeUrl = publicUrl
-      await admin.from('singles').update({ resume_url: resumeUrl }).eq('id', single.id)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (admin.from('singles') as any).update({ resume_url: resumeUrl }).eq('id', single.id)
     }
   }
 
-  // Build Claude message content
-  const model = process.env.AI_RESUME_MODEL ?? process.env.AI_PARSE_MODEL ?? 'claude-sonnet-4-20250514'
+  const model = process.env.AI_RESUME_MODEL ?? process.env.AI_PARSE_MODEL ?? 'claude-sonnet-4-6'
   const maxTokens = parseInt(process.env.AI_RESUME_MAX_TOKENS ?? '2000', 10)
 
+  console.log(`[parse-resume] calling Claude model="${model}" maxTokens=${maxTokens}`)
+
+  // Build content blocks — document for PDFs, image for raster files
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const content: any[] = isPdf
     ? [
-        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+        {
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+        },
         { type: 'text', text: PARSE_PROMPT },
       ]
     : [
-        { type: 'image', source: { type: 'base64', media_type: file.type, data: base64 } },
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: file.type, data: base64 },
+        },
         { type: 'text', text: PARSE_PROMPT },
       ]
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
   try {
-    // Use beta endpoint for PDFs (adds the required anthropic-beta header)
+    // PDFs require the pdfs-2024-09-25 beta header
     const response = await anthropic.messages.create(
       { model, max_tokens: maxTokens, messages: [{ role: 'user', content }] },
       isPdf ? { headers: { 'anthropic-beta': 'pdfs-2024-09-25' } } : {}
     )
 
+    console.log(`[parse-resume] tokens in=${response.usage.input_tokens} out=${response.usage.output_tokens} model=${model}`)
+
     const raw = response.content
       .filter((b) => b.type === 'text')
       .map((b) => (b as { type: 'text'; text: string }).text)
       .join('')
+
+    console.log(`[parse-resume] raw response snippet: ${raw.slice(0, 120)}`)
 
     // Strip any markdown code fences Claude might add despite instructions
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
@@ -156,18 +181,24 @@ export async function POST(request: Request) {
     let fields: Record<string, unknown>
     try {
       fields = JSON.parse(cleaned)
-    } catch {
-      if (process.env.NODE_ENV === 'development') console.error('[parse-resume] bad JSON:', cleaned.slice(0, 200))
+    } catch (parseErr) {
+      console.error('[parse-resume] JSON parse failed:', parseErr)
+      console.error('[parse-resume] cleaned snippet:', cleaned.slice(0, 400))
       return NextResponse.json({ error: 'Could not parse resume — Claude returned malformed JSON.' }, { status: 500 })
     }
 
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[parse-resume] in=${response.usage.input_tokens} out=${response.usage.output_tokens} model=${model}`)
-    }
+    console.log(`[parse-resume] successfully parsed ${Object.keys(fields).length} fields`)
 
     return NextResponse.json({ fields, resumeUrl })
   } catch (err) {
-    if (process.env.NODE_ENV === 'development') console.error('[parse-resume] Claude error:', err)
+    if (err instanceof Anthropic.APIError) {
+      console.error(
+        `[parse-resume] Anthropic API error: status=${err.status} name=${err.name} message=${err.message}`,
+        JSON.stringify(err.error ?? '')
+      )
+    } else {
+      console.error('[parse-resume] unexpected error:', err)
+    }
     return NextResponse.json({ error: 'Resume parsing failed. Please try again.' }, { status: 500 })
   }
 }
