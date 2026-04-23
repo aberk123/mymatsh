@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -15,6 +15,9 @@ import {
   ChevronLeft,
   AlertTriangle,
   CheckCircle,
+  FileText,
+  Sparkles,
+  Loader2,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { AppLayout } from '@/components/ui/app-layout'
@@ -80,6 +83,51 @@ type FormValues = {
   privacy_show_contact: boolean
 }
 
+// Map Claude field names → form field names
+const FIELD_MAP: Partial<Record<string, keyof FormValues>> = {
+  first_name: 'first_name',
+  last_name: 'last_name',
+  full_hebrew_name: 'full_hebrew_name',
+  phone: 'phone',
+  email: 'email',
+  city: 'city',
+  state: 'state',
+  dob: 'dob',
+  about_me: 'about_bio',
+  looking_for: 'looking_for',
+  plans: 'plans',
+  family_background: 'family_background',
+  siblings: 'siblings',
+  occupation: 'occupation',
+  current_yeshiva_seminary: 'current_yeshiva_seminary',
+  eretz_yisroel: 'eretz_yisroel',
+  previous_yeshivos: 'high_schools',
+}
+
+const HASHKAFA_MAP: Record<string, string> = {
+  yeshivish: 'yeshivish',
+  'yeshivish black hat': 'yeshivish',
+  'modern orthodox': 'modern_orthodox',
+  'modern_orthodox': 'modern_orthodox',
+  'mlo': 'modern_orthodox',
+  chassidish: 'chassidish',
+  chasidish: 'chassidish',
+  hasidic: 'chassidish',
+  sephardic: 'sephardic',
+  sefardic: 'sephardic',
+  'baal teshuva': 'baal_teshuva',
+  'baal_teshuva': 'baal_teshuva',
+  bt: 'baal_teshuva',
+}
+
+function normalizeHashkafa(raw: string): string {
+  const lower = raw.toLowerCase().trim()
+  for (const [key, val] of Object.entries(HASHKAFA_MAP)) {
+    if (lower.includes(key)) return val
+  }
+  return 'other'
+}
+
 export default function NewSinglePage() {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(0)
@@ -88,10 +136,18 @@ export default function NewSinglePage() {
   const [dupWarning, setDupWarning] = useState<string | null>(null)
   const [mergeResult, setMergeResult] = useState<{ id: string; fields_added: string[]; fields_skipped: string[] } | null>(null)
 
+  // Resume AI state
+  const [resumeParsing, setResumeParsing] = useState(false)
+  const [resumeParseError, setResumeParseError] = useState('')
+  const [resumeFieldsFilled, setResumeFieldsFilled] = useState(0)
+  const [resumeFileName, setResumeFileName] = useState('')
+  const resumeInputRef = useRef<HTMLInputElement>(null)
+
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: {
@@ -104,6 +160,81 @@ export default function NewSinglePage() {
       privacy_show_contact: false,
     },
   })
+
+  const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setResumeParseError('')
+    setResumeFieldsFilled(0)
+    setResumeFileName(file.name)
+    setResumeParsing(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('resume', file)
+      const res = await fetch('/api/singles/parse-resume', { method: 'POST', body: formData })
+      const json = await res.json()
+      if (!res.ok) {
+        setResumeParseError(json.error ?? 'Resume parsing failed.')
+        return
+      }
+
+      const fields = json.fields as Record<string, unknown>
+      let count = 0
+
+      // Standard field map
+      for (const [claudeKey, formKey] of Object.entries(FIELD_MAP)) {
+        const val = fields[claudeKey]
+        if (val && typeof val === 'string' && val.trim()) {
+          setValue(formKey as keyof FormValues, val.trim() as never)
+          count++
+        }
+      }
+
+      // Gender
+      const genderVal = fields.gender
+      if (genderVal === 'male' || genderVal === 'female') {
+        setValue('gender', genderVal)
+        count++
+      }
+
+      // Age (integer)
+      const ageVal = fields.age
+      if (typeof ageVal === 'number' && ageVal > 0) {
+        setValue('age', ageVal)
+        count++
+      }
+
+      // Height: split total inches into feet + remainder
+      const hInches = fields.height_inches
+      if (typeof hInches === 'number' && hInches > 0) {
+        setValue('height_feet', Math.floor(hInches / 12))
+        setValue('height_inches_rem', hInches % 12)
+        count++
+      }
+
+      // Hashkafa: normalize to select value
+      const hashkafaVal = fields.hashkafa
+      if (hashkafaVal && typeof hashkafaVal === 'string') {
+        setValue('hashkafa', normalizeHashkafa(hashkafaVal))
+        count++
+      }
+
+      // Resume URL from storage upload
+      if (json.resumeUrl) {
+        setValue('resume_url', json.resumeUrl)
+      }
+
+      setResumeFieldsFilled(count)
+    } catch {
+      setResumeParseError('Network error. Please try again.')
+    } finally {
+      setResumeParsing(false)
+      // Reset input so same file can be re-uploaded
+      if (resumeInputRef.current) resumeInputRef.current.value = ''
+    }
+  }
 
   const onSubmit = async (data: FormValues) => {
     setSaving(true)
@@ -185,6 +316,68 @@ export default function NewSinglePage() {
           <h1 className="text-xl font-semibold text-[#1A1A1A]">Add New Single</h1>
           <p className="text-sm text-[#555555] mt-1">Complete all steps to create a full profile.</p>
         </div>
+
+        {/* Resume Upload Card */}
+        {!mergeResult && (
+          <div className="card p-5 mb-5">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg bg-yellow-50 border border-yellow-200 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="h-4 w-4 text-yellow-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-[#1A1A1A]">Quick Start: Upload Shidduch Résumé</p>
+                <p className="text-xs text-[#888888] mt-0.5">
+                  Upload a PDF or image and Claude AI will pre-fill the form fields automatically.
+                </p>
+
+                {resumeFieldsFilled > 0 && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-green-700 font-medium">
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    {resumeFieldsFilled} field{resumeFieldsFilled !== 1 ? 's' : ''} pre-filled from{' '}
+                    <span className="font-semibold truncate max-w-[160px]">{resumeFileName}</span>
+                  </div>
+                )}
+
+                {resumeParseError && (
+                  <p className="mt-2 text-xs text-red-600">{resumeParseError}</p>
+                )}
+
+                <div className="mt-3 flex items-center gap-3">
+                  <input
+                    ref={resumeInputRef}
+                    id="resume-upload"
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    className="hidden"
+                    onChange={handleResumeUpload}
+                    disabled={resumeParsing}
+                  />
+                  <label
+                    htmlFor="resume-upload"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                      resumeParsing
+                        ? 'bg-gray-50 border-gray-200 text-[#888888] cursor-not-allowed'
+                        : 'bg-white border-gray-300 text-[#1A1A1A] hover:border-brand-maroon hover:text-brand-maroon'
+                    }`}
+                  >
+                    {resumeParsing ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Parsing résumé…
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="h-3.5 w-3.5" />
+                        {resumeFieldsFilled > 0 ? 'Upload Different Résumé' : 'Choose Résumé File'}
+                      </>
+                    )}
+                  </label>
+                  <span className="text-xs text-[#AAAAAA]">PDF, JPG, PNG or WebP · max 10 MB</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {saveError && (
           <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
