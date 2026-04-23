@@ -167,11 +167,133 @@ export interface Database {
           is_parent_verified: boolean
           parent_notification_sent_at: string | null
           ai_personality_data: Json | null
+          // appearance
+          hair_color: string | null
+          eye_color: string | null
+          body_type: string | null
+          complexion: string | null
+          // religious
+          minyan_attendance: string | null
+          shabbos_observance: string | null
+          tznius_level: string | null
+          smoking: string | null
+          // lifestyle
+          dietary_restrictions: string | null
+          hobbies: string | null
+          personality_traits: string | null
           created_at: string
           updated_at: string
         }
         Insert: Omit<Database['public']['Tables']['singles']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['singles']['Insert']>
+      }
+      single_education: {
+        Row: {
+          id: string
+          single_id: string
+          elementary_school: string | null
+          high_schools: Json | null
+          post_high_school: string | null
+          bachelors_degree: string | null
+          grad_degree: string | null
+          certifications: string | null
+          currently_in_school: boolean
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['single_education']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['single_education']['Insert']>
+      }
+      single_family_details: {
+        Row: {
+          id: string
+          single_id: string
+          fathers_name: string | null
+          fathers_occupation: string | null
+          mothers_name: string | null
+          mothers_maiden_name: string | null
+          mothers_occupation: string | null
+          num_siblings: number | null
+          siblings_detail: Json | null
+          grandparents: Json | null
+          family_notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['single_family_details']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['single_family_details']['Insert']>
+      }
+      single_matching_criteria: {
+        Row: {
+          id: string
+          single_id: string
+          age_min: number | null
+          age_max: number | null
+          height_min: number | null
+          height_max: number | null
+          hashkafa_pref: string | null
+          location_pref: string | null
+          plans_pref: string | null
+          looking_for_traits: string | null
+          dealbreakers: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['single_matching_criteria']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['single_matching_criteria']['Insert']>
+      }
+      single_references: {
+        Row: {
+          id: string
+          single_id: string
+          name: string
+          relationship: string | null
+          phone: string | null
+          email: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['single_references']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['single_references']['Insert']>
+      }
+      single_photos: {
+        Row: {
+          id: string
+          single_id: string
+          storage_path: string
+          public_url: string
+          position: number
+          caption: string | null
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['single_photos']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['single_photos']['Insert']>
+      }
+      single_stars: {
+        Row: {
+          shadchan_id: string
+          single_id: string
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['single_stars']['Row'], 'created_at'>
+        Update: never
+      }
+      single_dating_history: {
+        Row: {
+          id: string
+          single_id: string
+          shadchan_id: string
+          person_name: string
+          date_approximate: string | null
+          outcome: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['single_dating_history']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['single_dating_history']['Insert']>
       }
       parents: {
         Row: {

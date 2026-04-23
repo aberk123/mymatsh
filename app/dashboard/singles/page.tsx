@@ -17,6 +17,7 @@ import {
   CheckCircle,
   Clock,
   SlidersHorizontal,
+  Star,
   X,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
@@ -60,6 +61,7 @@ interface ApiSingle {
   shadchan_name: string
   labels: string[]
   rep_status: string | null
+  is_starred: boolean
 }
 
 type ActiveTab = 'mine' | 'all'
@@ -95,6 +97,7 @@ export default function SinglesPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [hashkafaFilter, setHashkafaFilter] = useState('')
   const [labelFilter, setLabelFilter] = useState('')
+  const [starredFilter, setStarredFilter] = useState(false)
   const [ageMin, setAgeMin] = useState('')
   const [ageMax, setAgeMax] = useState('')
   const [heightMin, setHeightMin] = useState(0)
@@ -105,6 +108,7 @@ export default function SinglesPage() {
     !!statusFilter,
     !!hashkafaFilter,
     !!labelFilter,
+    starredFilter,
     !!ageMin || !!ageMax,
     heightMin > 0 || heightMax > 0,
   ].filter(Boolean).length
@@ -128,6 +132,7 @@ export default function SinglesPage() {
     if (genderFilter !== 'All') params.set('gender', genderFilter)
     if (hashkafaFilter) params.set('hashkafa', hashkafaFilter)
     if (labelFilter) params.set('label', labelFilter)
+    if (starredFilter) params.set('starred', 'true')
     if (activeTab === 'mine' && statusFilter) params.set('status', statusFilter)
     if (ageMin) params.set('age_min', ageMin)
     if (ageMax) params.set('age_max', ageMax)
@@ -138,7 +143,10 @@ export default function SinglesPage() {
       .then(r => r.json())
       .then(data => {
         if (fetchRef.current !== fetchId) return
-        setSingles(data.singles ?? [])
+        const rows: ApiSingle[] = data.singles ?? []
+        // Starred singles float to top of current page
+        rows.sort((a, b) => (b.is_starred ? 1 : 0) - (a.is_starred ? 1 : 0))
+        setSingles(rows)
         setTotal(data.total ?? 0)
         setTabTotals(prev => ({ ...prev, [activeTab]: data.total ?? 0 }))
         if (Array.isArray(data.labels_list) && data.labels_list.length > 0) {
@@ -149,7 +157,7 @@ export default function SinglesPage() {
       .finally(() => {
         if (fetchRef.current === fetchId) setLoading(false)
       })
-  }, [activeTab, page, debouncedSearch, genderFilter, statusFilter, hashkafaFilter, labelFilter, ageMin, ageMax, heightMin, heightMax])
+  }, [activeTab, page, debouncedSearch, genderFilter, statusFilter, hashkafaFilter, labelFilter, starredFilter, ageMin, ageMax, heightMin, heightMax])
 
   function switchTab(tab: ActiveTab) {
     setActiveTab(tab)
@@ -160,6 +168,7 @@ export default function SinglesPage() {
     setStatusFilter('')
     setHashkafaFilter('')
     setLabelFilter('')
+    setStarredFilter(false)
     setAgeMin('')
     setAgeMax('')
     setHeightMin(0)
@@ -171,6 +180,7 @@ export default function SinglesPage() {
     setStatusFilter('')
     setHashkafaFilter('')
     setLabelFilter('')
+    setStarredFilter(false)
     setAgeMin('')
     setAgeMax('')
     setHeightMin(0)
@@ -186,6 +196,14 @@ export default function SinglesPage() {
     })
     if (res.ok || res.status === 409) {
       setSingles(prev => prev.map(s => s.id === singleId ? { ...s, rep_status: 'pending' } : s))
+    }
+  }, [])
+
+  const handleToggleStar = useCallback(async (singleId: string, currentlyStarred: boolean) => {
+    setSingles(prev => prev.map(s => s.id === singleId ? { ...s, is_starred: !currentlyStarred } : s))
+    const res = await fetch(`/api/singles/${singleId}/star`, { method: 'POST' })
+    if (!res.ok) {
+      setSingles(prev => prev.map(s => s.id === singleId ? { ...s, is_starred: currentlyStarred } : s))
     }
   }, [])
 
@@ -248,6 +266,19 @@ export default function SinglesPage() {
             </select>
           </div>
         )}
+
+        <div>
+          <p className="text-xs font-medium text-[#555555] mb-2">Starred</p>
+          <button
+            onClick={() => { setStarredFilter(v => !v); setPage(1) }}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+              starredFilter ? 'bg-amber-50 border-amber-400 text-amber-600' : 'border-gray-300 text-[#555555]'
+            }`}
+          >
+            <Star className={`h-4 w-4 ${starredFilter ? 'fill-amber-400 text-amber-400' : ''}`} />
+            Starred only
+          </button>
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -425,6 +456,16 @@ export default function SinglesPage() {
             ))}
           </select>
 
+          <button
+            onClick={() => { setStarredFilter(v => !v); setPage(1) }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+              starredFilter ? 'bg-amber-50 border-amber-400 text-amber-600' : 'border-gray-300 text-[#555555] hover:bg-gray-50'
+            }`}
+          >
+            <Star className={`h-4 w-4 ${starredFilter ? 'fill-amber-400 text-amber-400' : ''}`} />
+            Starred
+          </button>
+
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-[#888888] whitespace-nowrap">Age</span>
             <input type="number" placeholder="Min" className="input-base w-16 text-center"
@@ -498,6 +539,15 @@ export default function SinglesPage() {
                     </div>
                   )}
                   <div className="flex items-center gap-2 pt-2 border-t border-gray-50">
+                    <button
+                      onClick={() => handleToggleStar(s.id, s.is_starred)}
+                      className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+                        s.is_starred ? 'text-amber-500' : 'text-gray-300 hover:text-amber-400'
+                      }`}
+                      aria-label={s.is_starred ? 'Unstar' : 'Star'}
+                    >
+                      <Star className={`h-5 w-5 ${s.is_starred ? 'fill-amber-400' : ''}`} />
+                    </button>
                     <Link href={`/dashboard/singles/${s.id}`} className="flex-1">
                       <Button variant="ghost" size="sm" className="w-full gap-1.5 min-h-[40px]">
                         <Eye className="h-3.5 w-3.5" />
@@ -545,6 +595,7 @@ export default function SinglesPage() {
                   <thead>
                     <tr>
                       <th className="table-th w-8">#</th>
+                      <th className="table-th w-8"></th>
                       <th className="table-th">Name</th>
                       <th className="table-th">Gender</th>
                       <th className="table-th">Age</th>
@@ -560,6 +611,11 @@ export default function SinglesPage() {
                     {singles.map((s, idx) => (
                       <tr key={s.id} className="table-row">
                         <td className="table-td text-[#888888]">{(page - 1) * PAGE_SIZE + idx + 1}</td>
+                        <td className="table-td">
+                          <button onClick={() => handleToggleStar(s.id, s.is_starred)} className="p-0.5" aria-label={s.is_starred ? 'Unstar' : 'Star'}>
+                            <Star className={`h-4 w-4 ${s.is_starred ? 'fill-amber-400 text-amber-400' : 'text-gray-300 hover:text-amber-400'}`} />
+                          </button>
+                        </td>
                         <td className="table-td font-medium text-[#1A1A1A]">
                           <Link href={`/dashboard/singles/${s.id}`} className="hover:text-brand-maroon transition-colors">
                             {s.first_name} {s.last_name}
@@ -589,7 +645,7 @@ export default function SinglesPage() {
                       </tr>
                     ))}
                     {singles.length === 0 && (
-                      <tr><td colSpan={10} className="text-center py-12 text-[#888888] text-sm">
+                      <tr><td colSpan={11} className="text-center py-12 text-[#888888] text-sm">
                         {total === 0 ? 'No singles added yet.' : 'No singles match your filters.'}
                       </td></tr>
                     )}
@@ -600,6 +656,7 @@ export default function SinglesPage() {
                   <thead>
                     <tr>
                       <th className="table-th w-8">#</th>
+                      <th className="table-th w-8"></th>
                       <th className="table-th">Name</th>
                       <th className="table-th">Gender</th>
                       <th className="table-th">Age</th>
@@ -614,6 +671,11 @@ export default function SinglesPage() {
                     {singles.map((s, idx) => (
                       <tr key={s.id} className="table-row">
                         <td className="table-td text-[#888888]">{(page - 1) * PAGE_SIZE + idx + 1}</td>
+                        <td className="table-td">
+                          <button onClick={() => handleToggleStar(s.id, s.is_starred)} className="p-0.5" aria-label={s.is_starred ? 'Unstar' : 'Star'}>
+                            <Star className={`h-4 w-4 ${s.is_starred ? 'fill-amber-400 text-amber-400' : 'text-gray-300 hover:text-amber-400'}`} />
+                          </button>
+                        </td>
                         <td className="table-td font-medium text-[#1A1A1A]">
                           <Link href={`/dashboard/singles/${s.id}`} className="hover:text-brand-maroon transition-colors">
                             {s.first_name} {s.last_name}
@@ -660,7 +722,7 @@ export default function SinglesPage() {
                       </tr>
                     ))}
                     {singles.length === 0 && (
-                      <tr><td colSpan={9} className="text-center py-12 text-[#888888] text-sm">No singles match your filters.</td></tr>
+                      <tr><td colSpan={10} className="text-center py-12 text-[#888888] text-sm">No singles match your filters.</td></tr>
                     )}
                   </tbody>
                 </table>

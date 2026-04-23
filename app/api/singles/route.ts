@@ -50,6 +50,7 @@ export async function GET(request: Request) {
   const hashkafa = searchParams.get('hashkafa') ?? ''
   const statusParam = searchParams.get('status') ?? ''
   const labelFilter = searchParams.get('label') ?? ''
+  const starredOnly = searchParams.get('starred') === 'true'
   const ageMin = searchParams.get('age_min') ? parseInt(searchParams.get('age_min')!, 10) : null
   const ageMax = searchParams.get('age_max') ? parseInt(searchParams.get('age_max')!, 10) : null
   const heightMin = searchParams.get('height_min') ? parseInt(searchParams.get('height_min')!, 10) : null
@@ -100,6 +101,18 @@ export async function GET(request: Request) {
 
   if (labelFilterIds !== null && labelFilterIds.length === 0) {
     return NextResponse.json({ singles: [], total: 0, page, per_page: perPage, total_pages: 0, labels_list: labelsList })
+  }
+
+  // Starred filter
+  let starredIds: string[] | null = null
+  if (starredOnly && profileId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: starData } = await (adminClient.from('single_stars') as any)
+      .select('single_id').eq('shadchan_id', profileId) as { data: Array<{ single_id: string }> | null }
+    starredIds = (starData ?? []).map((s: { single_id: string }) => s.single_id)
+    if (starredIds.length === 0) {
+      return NextResponse.json({ singles: [], total: 0, page, per_page: perPage, total_pages: 0, labels_list: labelsList })
+    }
   }
 
   const from = (page - 1) * perPage
@@ -156,6 +169,7 @@ export async function GET(request: Request) {
   if (heightMin !== null && heightMin > 0 && !isNaN(heightMin)) query = query.gte('height_inches', heightMin)
   if (heightMax !== null && heightMax > 0 && !isNaN(heightMax)) query = query.lte('height_inches', heightMax)
   if (labelFilterIds !== null && labelFilterIds.length > 0) query = query.in('id', labelFilterIds)
+  if (starredIds !== null && starredIds.length > 0) query = query.in('id', starredIds)
 
   query = tab === 'mine'
     ? query.order('created_at', { ascending: false })
@@ -209,6 +223,17 @@ export async function GET(request: Request) {
     }
   }
 
+  // Starred singles for this shadchan
+  const starredSet = new Set<string>()
+  if (profileId && rows.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: starData } = await (adminClient.from('single_stars') as any)
+      .select('single_id')
+      .eq('shadchan_id', profileId)
+      .in('single_id', rows.map((s) => s.id)) as { data: Array<{ single_id: string }> | null }
+    for (const s of starData ?? []) starredSet.add(s.single_id)
+  }
+
   // Representation request status (all tab only)
   const repMap: Record<string, string> = {}
   if (tab === 'all' && profileId && rows.length > 0) {
@@ -237,6 +262,7 @@ export async function GET(request: Request) {
       shadchan_name: shadchanMap[s.created_by_shadchan_id] ?? '—',
       labels: labelsBySingle[s.id] ?? [],
       rep_status: repMap[s.id] ?? null,
+      is_starred: starredSet.has(s.id),
     })),
     total,
     page,
