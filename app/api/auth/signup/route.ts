@@ -49,7 +49,8 @@ export async function POST(request: Request) {
     // shadchan accounts start as pending, all others as active
     const status = role === 'shadchan' ? 'pending' : 'active'
 
-    const metadata: Record<string, string> = {
+    // user_metadata is JSON — arrays are stored as-is
+    const metadata: Record<string, unknown> = {
       first_name: firstName ?? '',
       last_name: lastName ?? '',
     }
@@ -58,9 +59,10 @@ export async function POST(request: Request) {
       if (state) metadata.state = state
       if (yearsExperience) metadata.years_experience = yearsExperience
       if (expertise) metadata.expertise = expertise
-      if (ageBracket) metadata.age_bracket = ageBracket
-      if (contactPref) metadata.contact_pref = contactPref
-      if (bestDay) metadata.best_day = bestDay
+      // ageBracket, contactPref, bestDay are now string[] from the multi-select UI
+      if (Array.isArray(ageBracket) && ageBracket.length > 0) metadata.age_bracket = ageBracket
+      if (Array.isArray(contactPref) && contactPref.length > 0) metadata.contact_pref = contactPref
+      if (Array.isArray(bestDay) && bestDay.length > 0) metadata.best_day = bestDay
       if (bestTime) metadata.best_time = bestTime
       if (reference) metadata.reference = reference
     }

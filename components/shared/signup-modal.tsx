@@ -26,7 +26,7 @@ const roles: { value: UserRole; label: string; description: string }[] = [
 ]
 
 const YEAR_OPTIONS = ['Less than 1 year', '1–2 years', '3–5 years', '6–10 years', '11–20 years', '20+ years']
-const DAY_OPTIONS = ['Any', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Weekdays', 'Weekends']
+const DAY_OPTIONS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Weekdays', 'Weekends', 'Any']
 const TIME_OPTIONS = ['Any', 'Morning', 'Afternoon', 'Evening']
 const CONTACT_OPTIONS = ['Email', 'Phone', 'WhatsApp', 'Text']
 const AGE_OPTIONS = ['18–22', '22–26', '26–30', '30–35', '35+', 'All ages']
@@ -40,9 +40,9 @@ interface ShadchanForm {
   state: string
   yearsExperience: string
   expertise: string
-  ageBracket: string
-  contactPref: string
-  bestDay: string
+  ageBracket: string[]
+  contactPref: string[]
+  bestDay: string[]
   bestTime: string
   reference: string
   password: string
@@ -60,13 +60,37 @@ interface SimpleForm {
 
 const blankShadchan: ShadchanForm = {
   firstName: '', lastName: '', email: '', phone: '', city: '', state: '',
-  yearsExperience: '1–2 years', expertise: '', ageBracket: 'All ages',
-  contactPref: 'Email', bestDay: 'Any', bestTime: 'Any', reference: '',
-  password: '', confirmPassword: '',
+  yearsExperience: '1–2 years', expertise: '',
+  ageBracket: [], contactPref: [], bestDay: [],
+  bestTime: 'Any', reference: '', password: '', confirmPassword: '',
 }
 
 const blankSimple: SimpleForm = {
   firstName: '', lastName: '', email: '', phone: '', password: '', confirmPassword: '',
+}
+
+// Chip selector for multi-select fields
+function ChipSelect({
+  options, selected, onToggle,
+}: { options: string[]; selected: string[]; onToggle: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onToggle(opt)}
+          className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-all ${
+            selected.includes(opt)
+              ? 'bg-brand-maroon text-white border-brand-maroon'
+              : 'bg-white text-[#555555] border-gray-300 hover:border-brand-maroon hover:text-brand-maroon'
+          }`}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 export function SignUpModal({ open, onClose }: SignUpModalProps) {
@@ -81,6 +105,13 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
   function setShadchan(key: keyof ShadchanForm, val: string) {
     setShadchanForm((prev) => ({ ...prev, [key]: val }))
     if (errors[key]) setErrors((prev) => { const e = { ...prev }; delete e[key]; return e })
+  }
+
+  function toggleChip(key: 'ageBracket' | 'contactPref' | 'bestDay', value: string) {
+    setShadchanForm((prev) => {
+      const arr = prev[key]
+      return { ...prev, [key]: arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value] }
+    })
   }
 
   function setSimple(key: keyof SimpleForm, val: string) {
@@ -291,42 +322,40 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
                 />
               </div>
 
-              {/* Age bracket */}
+              {/* Age bracket — multi-select chips */}
               <div>
                 <Label className="field-label">Age Bracket You Work With</Label>
-                <select
-                  className="input-base mt-1 w-full"
-                  value={shadchanForm.ageBracket}
-                  onChange={(e) => setShadchan('ageBracket', e.target.value)}
-                >
-                  {AGE_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-                </select>
+                <p className="text-xs text-[#888888] mt-0.5">Select all that apply</p>
+                <ChipSelect
+                  options={AGE_OPTIONS}
+                  selected={shadchanForm.ageBracket}
+                  onToggle={(v) => toggleChip('ageBracket', v)}
+                />
               </div>
 
-              {/* Communication preference */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="field-label">Best Contact Method</Label>
-                  <select
-                    className="input-base mt-1 w-full"
-                    value={shadchanForm.contactPref}
-                    onChange={(e) => setShadchan('contactPref', e.target.value)}
-                  >
-                    {CONTACT_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <Label className="field-label">Best Day</Label>
-                  <select
-                    className="input-base mt-1 w-full"
-                    value={shadchanForm.bestDay}
-                    onChange={(e) => setShadchan('bestDay', e.target.value)}
-                  >
-                    {DAY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-                  </select>
-                </div>
+              {/* Best Contact Method — multi-select chips */}
+              <div>
+                <Label className="field-label">Best Contact Method</Label>
+                <p className="text-xs text-[#888888] mt-0.5">Select all that apply</p>
+                <ChipSelect
+                  options={CONTACT_OPTIONS}
+                  selected={shadchanForm.contactPref}
+                  onToggle={(v) => toggleChip('contactPref', v)}
+                />
               </div>
 
+              {/* Best Day — multi-select chips */}
+              <div>
+                <Label className="field-label">Best Day to Reach</Label>
+                <p className="text-xs text-[#888888] mt-0.5">Select all that apply</p>
+                <ChipSelect
+                  options={DAY_OPTIONS}
+                  selected={shadchanForm.bestDay}
+                  onToggle={(v) => toggleChip('bestDay', v)}
+                />
+              </div>
+
+              {/* Best Time */}
               <div>
                 <Label className="field-label">Best Time to Reach</Label>
                 <select

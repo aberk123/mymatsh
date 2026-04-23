@@ -73,8 +73,8 @@ export async function PATCH(request: Request) {
 
   const allowed = [
     'title', 'full_name', 'city', 'state', 'country', 'phone', 'email',
-    'languages', 'availability', 'best_contact_method', 'second_best_contact_method',
-    'best_day', 'best_time', 'years_experience', 'shidduchim_made',
+    'languages', 'availability', 'best_contact_method', 'best_day', 'best_time',
+    'age_bracket', 'years_experience', 'shidduchim_made',
     'available_for_advocacy', 'rates_for_services', 'type_of_service',
     'hide_personal_info_from_profile', 'reference_1', 'reference_2', 'organization_id',
   ]

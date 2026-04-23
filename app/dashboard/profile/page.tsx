@@ -34,6 +34,32 @@ const navItems: NavItem[] = [
 type Tab = 'profile' | 'availability' | 'references'
 
 const LANGUAGE_OPTIONS = ['English', 'Hebrew', 'Yiddish', 'French', 'Russian', 'Spanish']
+const CONTACT_OPTIONS = ['Email', 'Phone', 'WhatsApp', 'Text']
+const DAY_OPTIONS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Weekdays', 'Weekends', 'Any']
+const AGE_OPTIONS = ['18–22', '22–26', '26–30', '30–35', '35+', 'All ages']
+
+function ChipSelect({
+  options, selected, onToggle,
+}: { options: string[]; selected: string[]; onToggle: (v: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-1.5">
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onToggle(opt)}
+          className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-all ${
+            selected.includes(opt)
+              ? 'bg-brand-maroon text-white border-brand-maroon'
+              : 'bg-white text-[#555555] border-gray-300 hover:border-brand-maroon hover:text-brand-maroon'
+          }`}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 interface OrgOption {
   id: string
@@ -63,10 +89,10 @@ export default function ProfilePage() {
 
   // Availability tab state
   const [availability, setAvailability] = useState('Part Time')
-  const [bestContactMethod, setBestContactMethod] = useState('Email')
-  const [secondBestContactMethod, setSecondBestContactMethod] = useState('Phone')
-  const [bestDay, setBestDay] = useState('Any')
+  const [bestContactMethod, setBestContactMethod] = useState<string[]>([])
+  const [bestDay, setBestDay] = useState<string[]>([])
   const [bestTime, setBestTime] = useState('Any')
+  const [ageBracket, setAgeBracket] = useState<string[]>([])
   const [availableForAdvocacy, setAvailableForAdvocacy] = useState(false)
   const [ratesForServices, setRatesForServices] = useState('')
 
@@ -105,10 +131,14 @@ export default function ProfilePage() {
           setShidduchimMade((profile.shidduchim_made as string) ?? '1-5')
           setAbout((profile.type_of_service as string) ?? '')
           setAvailability((profile.availability as string) ?? 'Part Time')
-          setBestContactMethod((profile.best_contact_method as string) ?? 'Email')
-          setSecondBestContactMethod((profile.second_best_contact_method as string) ?? 'Phone')
-          setBestDay((profile.best_day as string) ?? 'Any')
+          // These are now text[] in the DB — guard against legacy string values
+          const bcm = profile.best_contact_method
+          setBestContactMethod(Array.isArray(bcm) ? bcm : bcm ? [bcm as string] : [])
+          const bd = profile.best_day
+          setBestDay(Array.isArray(bd) ? bd : bd ? [bd as string] : [])
           setBestTime((profile.best_time as string) ?? 'Any')
+          const ab = profile.age_bracket
+          setAgeBracket(Array.isArray(ab) ? ab : ab ? [ab as string] : [])
           setAvailableForAdvocacy((profile.available_for_advocacy as boolean) ?? false)
           setRatesForServices((profile.rates_for_services as string) ?? '')
           setReference1((profile.reference_1 as string) ?? '')
@@ -155,9 +185,9 @@ export default function ProfilePage() {
           type_of_service: about,
           availability,
           best_contact_method: bestContactMethod,
-          second_best_contact_method: secondBestContactMethod,
           best_day: bestDay,
           best_time: bestTime,
+          age_bracket: ageBracket,
           available_for_advocacy: availableForAdvocacy,
           rates_for_services: ratesForServices,
           reference_1: reference1,
@@ -348,41 +378,37 @@ export default function ProfilePage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="field-label">Best Contact Method</Label>
-                <select className="input-base mt-1 w-full" value={bestContactMethod} onChange={(e) => setBestContactMethod(e.target.value)}>
-                  <option>Email</option>
-                  <option>Phone</option>
-                  <option>WhatsApp</option>
-                  <option>Text</option>
-                </select>
-              </div>
-              <div>
-                <Label className="field-label">Second Best Contact</Label>
-                <select className="input-base mt-1 w-full" value={secondBestContactMethod} onChange={(e) => setSecondBestContactMethod(e.target.value)}>
-                  <option>Email</option>
-                  <option>Phone</option>
-                  <option>WhatsApp</option>
-                  <option>Text</option>
-                </select>
-              </div>
+            <div>
+              <Label className="field-label">Age Bracket You Work With</Label>
+              <p className="text-xs text-[#888888] mt-0.5">Select all that apply</p>
+              <ChipSelect
+                options={AGE_OPTIONS}
+                selected={ageBracket}
+                onToggle={(v) => setAgeBracket((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])}
+              />
+            </div>
+
+            <div>
+              <Label className="field-label">Best Contact Method</Label>
+              <p className="text-xs text-[#888888] mt-0.5">Select all that apply</p>
+              <ChipSelect
+                options={CONTACT_OPTIONS}
+                selected={bestContactMethod}
+                onToggle={(v) => setBestContactMethod((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])}
+              />
+            </div>
+
+            <div>
+              <Label className="field-label">Best Day to Reach</Label>
+              <p className="text-xs text-[#888888] mt-0.5">Select all that apply</p>
+              <ChipSelect
+                options={DAY_OPTIONS}
+                selected={bestDay}
+                onToggle={(v) => setBestDay((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="field-label">Best Day</Label>
-                <select className="input-base mt-1 w-full" value={bestDay} onChange={(e) => setBestDay(e.target.value)}>
-                  <option>Monday</option>
-                  <option>Tuesday</option>
-                  <option>Wednesday</option>
-                  <option>Thursday</option>
-                  <option>Friday</option>
-                  <option>Weekdays</option>
-                  <option>Weekends</option>
-                  <option>Any</option>
-                </select>
-              </div>
               <div>
                 <Label className="field-label">Best Time</Label>
                 <select className="input-base mt-1 w-full" value={bestTime} onChange={(e) => setBestTime(e.target.value)}>
