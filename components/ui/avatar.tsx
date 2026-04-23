@@ -4,7 +4,7 @@ import { getInitials } from '@/lib/utils'
 interface AvatarProps {
   name: string
   imageUrl?: string | null
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
   className?: string
 }
 
@@ -13,6 +13,7 @@ const sizeClasses = {
   md: 'h-10 w-10 text-sm',
   lg: 'h-16 w-16 text-xl',
   xl: 'h-32 w-32 text-4xl',
+  '2xl': 'h-[120px] w-[120px] text-4xl',
 }
 
 export function Avatar({ name, imageUrl, size = 'md', className }: AvatarProps) {
