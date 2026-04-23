@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import {
   LayoutDashboard,
   Users,
@@ -71,7 +72,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
-  const [saveSuccess, setSaveSuccess] = useState(false)
   const [orgs, setOrgs] = useState<OrgOption[]>([])
 
   // Profile tab state
@@ -166,7 +166,6 @@ export default function ProfilePage() {
   async function handleSave() {
     setSaving(true)
     setSaveError('')
-    setSaveSuccess(false)
     try {
       const res = await fetch('/api/shadchan/profile', {
         method: 'PATCH',
@@ -201,8 +200,7 @@ export default function ProfilePage() {
         setSaveError(json.error ?? 'Failed to save. Please try again.')
         return
       }
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 3000)
+      toast.success('Profile saved successfully.')
     } catch {
       setSaveError('Network error. Please try again.')
     } finally {
@@ -239,11 +237,6 @@ export default function ProfilePage() {
       {saveError && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
           {saveError}
-        </div>
-      )}
-      {saveSuccess && (
-        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
-          Profile saved successfully.
         </div>
       )}
 

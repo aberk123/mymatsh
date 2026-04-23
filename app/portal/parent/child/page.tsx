@@ -9,15 +9,17 @@ import {
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import type { NavItem } from '@/components/ui/sidebar'
-
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/portal/parent', icon: LayoutDashboard },
-  { label: 'My Child', href: '/portal/parent/child', icon: UserCircle },
-  { label: 'Suggestions', href: '/portal/parent/matches', icon: Heart },
-  { label: 'Messages', href: '/portal/parent/messages', icon: MessageSquare, badge: '1' },
-]
+import { useUnreadMessageCount } from '@/lib/use-unread-messages'
 
 export default function ParentChildProfilePage() {
+  const unreadMsgCount = useUnreadMessageCount()
+  const navItems: NavItem[] = [
+    { label: 'Dashboard', href: '/portal/parent', icon: LayoutDashboard },
+    { label: 'My Child', href: '/portal/parent/child', icon: UserCircle },
+    { label: 'Suggestions', href: '/portal/parent/matches', icon: Heart },
+    { label: 'Messages', href: '/portal/parent/messages', icon: MessageSquare, ...(unreadMsgCount > 0 ? { badge: String(unreadMsgCount) } : {}) },
+  ]
+
   return (
     <AppLayout navItems={navItems} title="Child's Profile" role="parent">
       <div className="card flex flex-col items-center justify-center py-16 text-center gap-3 max-w-md mx-auto">

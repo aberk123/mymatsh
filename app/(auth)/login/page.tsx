@@ -27,6 +27,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const useOtp = searchParams.get('type') === 'phone'
+  const resetSuccess = searchParams.get('reset') === '1'
 
   const passwordForm = useForm<PasswordFormData>({ resolver: zodResolver(passwordSchema) })
   const otpForm = useForm<OtpFormData>({ resolver: zodResolver(otpSchema) })
@@ -64,6 +65,12 @@ function LoginForm() {
     <div className="bg-white rounded-2xl shadow-xl p-8">
       <h1 className="text-2xl font-bold text-[#1A1A1A] mb-2">Welcome Back</h1>
       <p className="text-sm text-[#555555] mb-6">Sign in to your MyMatSH account</p>
+
+      {resetSuccess && (
+        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+          Password updated successfully — please log in.
+        </div>
+      )}
 
       {/* Login type toggle */}
       <div className="flex rounded-lg border border-gray-200 mb-6 overflow-hidden">
@@ -120,7 +127,7 @@ function LoginForm() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <Label htmlFor="password" required>Password</Label>
-              <Link href="/verify" className="text-xs text-brand-maroon hover:underline">
+              <Link href="/forgot-password" className="text-xs text-brand-maroon hover:underline">
                 Forgot password?
               </Link>
             </div>

@@ -16,19 +16,20 @@ import {
 import { AppLayout } from '@/components/ui/app-layout'
 import { Button } from '@/components/ui/button'
 import type { NavItem } from '@/components/ui/sidebar'
-
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'My Singles', href: '/dashboard/singles', icon: Users },
-  { label: 'Suggestions', href: '/dashboard/matches', icon: Heart },
-  { label: 'Calendar', href: '/dashboard/tasks', icon: CalendarCheck },
-  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, badge: '3' },
-  { label: 'Groups', href: '/dashboard/groups', icon: UsersRound },
-  { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
-]
+import { useUnreadMessageCount } from '@/lib/use-unread-messages'
 
 export default function EditSinglePage() {
   const params = useParams()
+  const unreadMsgCount = useUnreadMessageCount()
+  const navItems: NavItem[] = [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'My Singles', href: '/dashboard/singles', icon: Users },
+    { label: 'Suggestions', href: '/dashboard/matches', icon: Heart },
+    { label: 'Calendar', href: '/dashboard/tasks', icon: CalendarCheck },
+    { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, ...(unreadMsgCount > 0 ? { badge: String(unreadMsgCount) } : {}) },
+    { label: 'Groups', href: '/dashboard/groups', icon: UsersRound },
+    { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
+  ]
 
   return (
     <AppLayout navItems={navItems} title="Edit Single" role="shadchan">

@@ -20,6 +20,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useUnreadMessageCount } from '@/lib/use-unread-messages'
 import { AppLayout } from '@/components/ui/app-layout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,15 +29,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { WizardProgress } from '@/components/ui/dialog'
 import type { NavItem } from '@/components/ui/sidebar'
 
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'My Singles', href: '/dashboard/singles', icon: Users },
-  { label: 'Suggestions', href: '/dashboard/matches', icon: Heart },
-  { label: 'Calendar', href: '/dashboard/tasks', icon: CalendarCheck },
-  { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, badge: '3' },
-  { label: 'Groups', href: '/dashboard/groups', icon: UsersRound },
-  { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
-]
 
 const wizardSteps = [
   { index: 0, label: 'Basic Info' },
@@ -138,6 +130,17 @@ function AiBadge() {
 }
 
 export default function NewSinglePage() {
+  const unreadMsgCount = useUnreadMessageCount()
+  const navItems: NavItem[] = [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'My Singles', href: '/dashboard/singles', icon: Users },
+    { label: 'Suggestions', href: '/dashboard/matches', icon: Heart },
+    { label: 'Calendar', href: '/dashboard/tasks', icon: CalendarCheck },
+    { label: 'Messages', href: '/dashboard/messages', icon: MessageSquare, ...(unreadMsgCount > 0 ? { badge: String(unreadMsgCount) } : {}) },
+    { label: 'Groups', href: '/dashboard/groups', icon: UsersRound },
+    { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
+  ]
+
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(0)
   const [saving, setSaving] = useState(false)

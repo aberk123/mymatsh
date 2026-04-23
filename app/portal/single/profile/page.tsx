@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useUnreadMessageCount } from '@/lib/use-unread-messages'
 import ReactCrop, { type Crop, type PixelCrop, centerCrop, makeAspectCrop } from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 import {
@@ -35,12 +36,6 @@ import {
 import type { NavItem } from '@/components/ui/sidebar'
 import { createClient } from '@/lib/supabase/client'
 
-const navItems: NavItem[] = [
-  { label: 'Dashboard', href: '/portal/single', icon: LayoutDashboard },
-  { label: 'My Profile', href: '/portal/single/profile', icon: UserCircle },
-  { label: 'Suggestions', href: '/portal/single/matches', icon: Heart },
-  { label: 'Messages', href: '/portal/single/messages', icon: MessageSquare, badge: '2' },
-]
 
 const SYSTEM_LABEL_GROUPS = [
   {
@@ -223,6 +218,14 @@ function ConflictRow({ label, currentValue, aiValue, inputType = 'input', onKeep
 }
 
 export default function SingleProfilePage() {
+  const unreadMsgCount = useUnreadMessageCount()
+  const navItems: NavItem[] = [
+    { label: 'Dashboard', href: '/portal/single', icon: LayoutDashboard },
+    { label: 'My Profile', href: '/portal/single/profile', icon: UserCircle },
+    { label: 'Suggestions', href: '/portal/single/matches', icon: Heart },
+    { label: 'Messages', href: '/portal/single/messages', icon: MessageSquare, ...(unreadMsgCount > 0 ? { badge: String(unreadMsgCount) } : {}) },
+  ]
+
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
