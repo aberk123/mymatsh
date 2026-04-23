@@ -49,17 +49,24 @@ export async function POST(request: Request) {
     const user = await requireAuth()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await request.json() as {
-      messages: Array<{ role: 'user' | 'assistant'; content: string }>
-      currentUrl: string
-      userRole: string
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) {
+      console.error('[HelpChat] ANTHROPIC_API_KEY is not set in environment variables. Add it to .env.local.')
+      return NextResponse.json({ error: 'Chat service is not configured (missing API key)' }, { status: 503 })
+    }
+
+    let body: { messages: Array<{ role: 'user' | 'assistant'; content: string }>; currentUrl: string; userRole: string }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
     if (!Array.isArray(body.messages)) {
       return NextResponse.json({ error: 'messages array required' }, { status: 400 })
     }
 
-    const model = process.env.AI_CHAT_MODEL ?? 'claude-sonnet-4-20250514'
+    const model = process.env.AI_CHAT_MODEL ?? 'claude-haiku-4-5-20251001'
     const maxTokens = parseInt(process.env.AI_CHAT_MAX_TOKENS ?? '500', 10)
     const maxHistory = parseInt(process.env.AI_CHAT_MAX_HISTORY ?? '10', 10)
 
@@ -70,7 +77,7 @@ export async function POST(request: Request) {
     // Trim history server-side before calling Claude
     const messages = body.messages.slice(-maxHistory)
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+    const client = new Anthropic({ apiKey })
 
     const response = await client.messages.create({
       model,
@@ -93,7 +100,10 @@ export async function POST(request: Request) {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
     })
-  } catch {
+  } catch (err) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[HelpChat] API error:', err)
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
