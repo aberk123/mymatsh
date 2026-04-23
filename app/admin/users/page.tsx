@@ -18,6 +18,7 @@ import {
   Home,
   BookOpen,
   MessageSquare,
+  PackageOpen,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatCard } from '@/components/ui/stat-card'
@@ -42,6 +43,7 @@ const navItems: NavItem[] = [
   { label: 'News', href: '/admin/news', icon: Newspaper },
   { label: 'Donations', href: '/admin/donations', icon: DollarSign },
   { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
+  { label: 'Import Batches', href: '/admin/import-batches', icon: PackageOpen },
 ]
 
 interface UserRow {

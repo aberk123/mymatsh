@@ -17,6 +17,7 @@ import {
   Home,
   BookOpen,
   MessageSquare,
+  PackageOpen,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { Button } from '@/components/ui/button'
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
   { label: 'News', href: '/admin/news', icon: Newspaper },
   { label: 'Donations', href: '/admin/donations', icon: DollarSign },
   { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
+  { label: 'Import Batches', href: '/admin/import-batches', icon: PackageOpen },
 ]
 
 interface Article {

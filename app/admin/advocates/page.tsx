@@ -17,6 +17,7 @@ import {
   BookOpen,
   MessageSquare,
   Search,
+  PackageOpen,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { label: 'News', href: '/admin/news', icon: Newspaper },
   { label: 'Donations', href: '/admin/donations', icon: DollarSign },
   { label: 'Audit Log', href: '/admin/audit-log', icon: ClipboardList },
+  { label: 'Import Batches', href: '/admin/import-batches', icon: PackageOpen },
 ]
 
 interface Advocate {
