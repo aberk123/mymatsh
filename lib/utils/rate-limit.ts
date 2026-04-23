@@ -17,14 +17,31 @@ export interface RateLimitResult {
 /**
  * Check and increment a per-user rate limit.
  * Uses a tumbling window — resets at the start of each window period.
+ *
+ * Pass skipForRoles to allow certain roles to bypass the check entirely.
+ * The user's role is fetched from the users table only when skipForRoles is provided.
  */
 export async function checkRateLimit(
   userId: string,
   endpoint: string,
   maxRequests: number,
-  windowMs: number
+  windowMs: number,
+  options?: { skipForRoles?: string[] }
 ): Promise<RateLimitResult> {
   const supabase = serviceClient()
+
+  if (options?.skipForRoles?.length) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: userRow } = await (supabase.from('users') as any)
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle() as { data: { role: string } | null }
+
+    if (userRow && options.skipForRoles.includes(userRow.role)) {
+      return { allowed: true }
+    }
+  }
+
   const now = Date.now()
   // Align window start to a fixed grid (e.g. every hour on the hour)
   const windowStart = new Date(Math.floor(now / windowMs) * windowMs).toISOString()

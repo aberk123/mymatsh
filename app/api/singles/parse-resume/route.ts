@@ -71,7 +71,8 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const resumeLimit = parseInt(process.env.RATE_LIMIT_RESUME_PER_DAY ?? '10', 10)
-  const rl = await checkRateLimit(user.id, 'singles/parse-resume', resumeLimit, 86_400_000)
+  const skipRoles = (process.env.RATE_LIMIT_SKIP_ROLES ?? 'platform_admin').split(',').map(r => r.trim()).filter(Boolean)
+  const rl = await checkRateLimit(user.id, 'singles/parse-resume', resumeLimit, 86_400_000, { skipForRoles: skipRoles })
   if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs!)
 
   let formData: FormData
