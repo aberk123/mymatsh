@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'messages array required' }, { status: 400 })
     }
 
-    const model = process.env.AI_CHAT_MODEL ?? 'claude-haiku-4-5-20251001'
+    const model = process.env.AI_CHAT_MODEL ?? 'claude-sonnet-4-5'
     const maxTokens = parseInt(process.env.AI_CHAT_MAX_TOKENS ?? '500', 10)
     const maxHistory = parseInt(process.env.AI_CHAT_MAX_HISTORY ?? '10', 10)
 

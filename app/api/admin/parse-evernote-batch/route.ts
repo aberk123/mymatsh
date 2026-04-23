@@ -266,7 +266,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'notes array required' }, { status: 400 })
     }
 
-    const model = process.env.AI_PARSE_MODEL ?? 'claude-sonnet-4-20250514'
+    const model = process.env.AI_PARSE_MODEL ?? 'claude-sonnet-4-5'
     const maxTokens = parseInt(process.env.AI_PARSE_MAX_TOKENS ?? '4000', 10)
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })

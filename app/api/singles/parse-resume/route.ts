@@ -134,7 +134,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const model = process.env.AI_RESUME_MODEL ?? process.env.AI_PARSE_MODEL ?? 'claude-sonnet-4-6'
+  const model = process.env.AI_RESUME_MODEL ?? process.env.AI_PARSE_MODEL ?? 'claude-sonnet-4-5'
   const maxTokens = parseInt(process.env.AI_RESUME_MAX_TOKENS ?? '2000', 10)
 
   console.log(`[parse-resume] calling Claude model="${model}" maxTokens=${maxTokens}`)
