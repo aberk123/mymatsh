@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { type Database } from '@/types/database'
+import { createNotification } from '@/lib/utils/notifications'
 
 export async function POST(request: Request) {
   const cookieStore = await cookies()
@@ -78,6 +79,23 @@ export async function POST(request: Request) {
 
   if (error) {
     return NextResponse.json({ error: (error as { message: string }).message }, { status: 500 })
+  }
+
+  // Notify singles who have portal accounts
+  if (newMatch) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: singles } = await (adminClient.from('singles') as any)
+      .select('id, user_id, first_name, last_name')
+      .in('id', [boy_id, girl_id]) as { data: { id: string; user_id: string | null; first_name: string; last_name: string }[] | null }
+
+    for (const s of singles ?? []) {
+      if (!s.user_id) continue
+      await createNotification(s.user_id, 'match_suggested', {
+        match_id: newMatch.id,
+        message: 'A new match has been suggested for you.',
+        link: '/portal/single/matches',
+      })
+    }
   }
 
   return NextResponse.json({ id: newMatch?.id })

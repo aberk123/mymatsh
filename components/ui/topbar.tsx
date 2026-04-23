@@ -1,5 +1,6 @@
 import { RoleBadge } from './badge'
 import { Button } from './button'
+import { NotificationBell } from './notification-bell'
 import { type UserRole } from '@/types/database'
 
 interface TopbarProps {
@@ -25,11 +26,12 @@ export function Topbar({ title, role, children }: TopbarProps) {
         {title}
       </h1>
 
-      {/* Right: Tour + Role badge */}
+      {/* Right: Tour + Notifications + Role badge */}
       <div className="flex-1 flex items-center justify-end gap-3">
         <Button variant="outline-maroon" size="sm">
           Take The Tour
         </Button>
+        <NotificationBell />
         <RoleBadge role={role} />
       </div>
     </header>

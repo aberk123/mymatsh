@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { Database } from '@/types/database'
+import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit'
 
 async function requireAuth() {
   const cookieStore = await cookies()
@@ -48,6 +49,10 @@ export async function POST(request: Request) {
   try {
     const user = await requireAuth()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const chatLimit = parseInt(process.env.RATE_LIMIT_CHAT_PER_HOUR ?? '50', 10)
+    const rl = await checkRateLimit(user.id, 'chat/help', chatLimit, 3_600_000)
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs!)
 
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {

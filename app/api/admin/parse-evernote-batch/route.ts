@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { Database } from '@/types/database'
 import type { ParsedSingle } from '@/lib/utils/evernote-parser'
+import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit'
 
 async function requireAdmin() {
   const cookieStore = await cookies()
@@ -260,6 +261,10 @@ export async function POST(request: Request) {
   try {
     const user = await requireAdmin()
     if (!user) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const evernoteLimit = parseInt(process.env.RATE_LIMIT_EVERNOTE_PER_DAY ?? '20', 10)
+    const rl = await checkRateLimit(user.id, 'admin/parse-evernote-batch', evernoteLimit, 86_400_000)
+    if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs!)
 
     const body = await request.json() as { notes: NoteInput[] }
     if (!Array.isArray(body.notes) || body.notes.length === 0) {

@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { type Database } from '@/types/database'
+import { createNotification } from '@/lib/utils/notifications'
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const cookieStore = await cookies()
@@ -53,6 +54,36 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   if (error) {
     return NextResponse.json({ error: (error as { message: string }).message }, { status: 500 })
+  }
+
+  // Notify the shadchan when a single becomes engaged or married
+  if (status === 'engaged' || status === 'married') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: single } = await (adminClient.from('singles') as any)
+        .select('first_name, last_name, created_by_shadchan_id')
+        .eq('id', params.id)
+        .maybeSingle() as { data: { first_name: string; last_name: string; created_by_shadchan_id: string | null } | null }
+
+      if (single?.created_by_shadchan_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: shadchanProfile } = await (adminClient.from('shadchan_profiles') as any)
+          .select('user_id')
+          .eq('id', single.created_by_shadchan_id)
+          .maybeSingle() as { data: { user_id: string } | null }
+
+        if (shadchanProfile?.user_id) {
+          const name = `${single.first_name} ${single.last_name}`
+          await createNotification(shadchanProfile.user_id, 'single_status_changed', {
+            single_id: params.id,
+            single_name: name,
+            new_status: status,
+            message: `${name} is now ${status}. Mazel Tov!`,
+            link: `/dashboard/singles/${params.id}`,
+          })
+        }
+      }
+    } catch { /* non-critical */ }
   }
 
   return NextResponse.json({ ok: true })

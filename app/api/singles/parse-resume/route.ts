@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { checkRateLimit, rateLimitResponse } from '@/lib/utils/rate-limit'
 
 const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
 const ALLOWED_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
@@ -68,6 +69,10 @@ function serviceClient() {
 export async function POST(request: Request) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const resumeLimit = parseInt(process.env.RATE_LIMIT_RESUME_PER_DAY ?? '10', 10)
+  const rl = await checkRateLimit(user.id, 'singles/parse-resume', resumeLimit, 86_400_000)
+  if (!rl.allowed) return rateLimitResponse(rl.retryAfterMs!)
 
   let formData: FormData
   try {

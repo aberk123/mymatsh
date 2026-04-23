@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { type Database } from '@/types/database'
+import { createNotification } from '@/lib/utils/notifications'
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   const cookieStore = await cookies()
@@ -74,6 +75,11 @@ export async function POST(_request: Request, { params }: { params: { id: string
   if (userError) {
     return NextResponse.json({ error: (userError as { message: string }).message }, { status: 500 })
   }
+
+  await createNotification(profile.user_id, 'shadchan_approved', {
+    message: 'Your shadchan application has been approved. You can now log in.',
+    link: '/dashboard',
+  })
 
   return NextResponse.json({ ok: true })
 }

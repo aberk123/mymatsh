@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { Database } from '@/types/database'
+import { notifyAllAdmins } from '@/lib/utils/notifications'
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   try {
@@ -36,6 +37,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       .eq('id', batch.id)
 
     if (updateErr) throw updateErr
+
+    await notifyAllAdmins('import_batch_approved', {
+      batch_id: batch.id,
+      message: 'An import batch has been approved by the shadchan and is ready for admin review.',
+      link: `/admin/import-batches/${batch.id}`,
+    })
+
     return NextResponse.json({ success: true })
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
