@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button'
 import type { NavItem } from '@/components/ui/sidebar'
 import { createClient } from '@/lib/supabase/client'
 import { checkDuplicate, type ParsedSingle, type ExistingSingle } from '@/lib/utils/evernote-parser'
+import type { ImportSummary } from '@/types/database'
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -51,6 +52,7 @@ interface BatchMeta {
   shadchan_name: string
   review_token: string
   shadchan_comments: string | null
+  import_summary: ImportSummary | null
   created_at: string
 }
 
@@ -75,7 +77,7 @@ export default function ImportBatchDetailPage() {
   const [editedData, setEditedData] = useState<ParsedSingle[]>([])
   const [saving, setSaving] = useState(false)
   const [approving, setApproving] = useState(false)
-  const [approveResult, setApproveResult] = useState<{ inserted: number; errors: string[] } | null>(null)
+  const [approveResult, setApproveResult] = useState<{ new_records: number; duplicates_skipped: number; existing_updated: number } | null>(null)
   const [rejecting, setRejecting] = useState(false)
   const [copied, setCopied] = useState(false)
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set())
@@ -84,7 +86,7 @@ export default function ImportBatchDetailPage() {
     async function load() {
       const res = await fetch(`/api/admin/import-batches/${id}`)
       if (!res.ok) { setLoading(false); return }
-      const batch = await res.json() as BatchMeta & { parsed_data: ParsedSingle[] }
+      const batch = await res.json() as BatchMeta & { parsed_data: ParsedSingle[]; import_summary: ImportSummary | null }
 
       setMeta({
         id: batch.id,
@@ -92,6 +94,7 @@ export default function ImportBatchDetailPage() {
         shadchan_name: batch.shadchan_name,
         review_token: batch.review_token,
         shadchan_comments: batch.shadchan_comments,
+        import_summary: (batch.import_summary as ImportSummary | null) ?? null,
         created_at: batch.created_at,
       })
 
@@ -145,9 +148,16 @@ export default function ImportBatchDetailPage() {
     })
     const res = await fetch(`/api/admin/import-batches/${id}/approve`, { method: 'POST' })
     if (res.ok) {
-      const result = await res.json() as { inserted: number; errors: string[] }
+      const result = await res.json() as { new_records: number; duplicates_skipped: number; existing_updated: number }
       setApproveResult(result)
-      setMeta(prev => prev ? { ...prev, status: 'admin_approved' } : prev)
+      // Reload to get import_summary
+      const refreshed = await fetch(`/api/admin/import-batches/${id}`)
+      if (refreshed.ok) {
+        const refreshedBatch = await refreshed.json() as BatchMeta & { import_summary: ImportSummary | null }
+        setMeta(prev => prev ? { ...prev, status: 'admin_approved', import_summary: refreshedBatch.import_summary } : prev)
+      } else {
+        setMeta(prev => prev ? { ...prev, status: 'admin_approved' } : prev)
+      }
     }
     setApproving(false)
   }
@@ -254,11 +264,101 @@ export default function ImportBatchDetailPage() {
         <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 flex items-center gap-2">
           <CheckCircle className="h-4 w-4 flex-shrink-0" />
           <span>
-            <span className="font-medium">{approveResult.inserted} singles imported</span>
-            {approveResult.errors.length > 0 && (
-              <span className="text-orange-600 ml-2">· {approveResult.errors.length} error{approveResult.errors.length !== 1 ? 's' : ''}</span>
+            <span className="font-medium">{approveResult.new_records} new</span>
+            {approveResult.existing_updated > 0 && (
+              <span className="ml-2 text-blue-600">· {approveResult.existing_updated} updated</span>
+            )}
+            {approveResult.duplicates_skipped > 0 && (
+              <span className="ml-2 text-orange-600">· {approveResult.duplicates_skipped} skipped</span>
             )}
           </span>
+        </div>
+      )}
+
+      {/* Import Summary Report */}
+      {meta.status === 'admin_approved' && meta.import_summary && (
+        <div className="mb-6 space-y-4">
+          <h3 className="text-sm font-semibold text-[#1A1A1A]">Import Report</h3>
+
+          {/* New Records */}
+          {meta.import_summary.new_records.length > 0 && (
+            <div className="card p-0 overflow-hidden">
+              <div className="px-4 py-2.5 bg-green-50 border-b border-green-100">
+                <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">
+                  New Records ({meta.import_summary.new_records.length})
+                </p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {meta.import_summary.new_records.map(r => (
+                  <div key={r.single_id} className="px-4 py-2.5 flex items-center justify-between">
+                    <span className="text-sm font-medium text-[#1A1A1A]">{r.name}</span>
+                    <span className="text-xs text-[#888888]">
+                      {r.gender && <span className="capitalize">{r.gender}</span>}
+                      {(r.city || r.state) && <span> · {[r.city, r.state].filter(Boolean).join(', ')}</span>}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Existing Updated */}
+          {meta.import_summary.existing_updated.length > 0 && (
+            <div className="card p-0 overflow-hidden">
+              <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-100">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+                  Existing Records Updated ({meta.import_summary.existing_updated.length})
+                </p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {meta.import_summary.existing_updated.map(r => (
+                  <div key={r.single_id} className="px-4 py-3">
+                    <p className="text-sm font-medium text-[#1A1A1A] mb-1">{r.name}</p>
+                    {r.fields_added.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        <span className="text-[10px] text-green-600 font-medium">Added:</span>
+                        {r.fields_added.map(f => (
+                          <span key={f} className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full">{f}</span>
+                        ))}
+                      </div>
+                    )}
+                    {r.fields_skipped.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        <span className="text-[10px] text-[#888888] font-medium">Already had:</span>
+                        {r.fields_skipped.map(f => (
+                          <span key={f} className="text-[10px] bg-gray-100 text-[#888888] px-1.5 py-0.5 rounded-full">{f}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Duplicates Skipped */}
+          {meta.import_summary.duplicates_skipped.length > 0 && (
+            <div className="card p-0 overflow-hidden">
+              <div className="px-4 py-2.5 bg-orange-50 border-b border-orange-100">
+                <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">
+                  Skipped — Possible Duplicates ({meta.import_summary.duplicates_skipped.length})
+                </p>
+              </div>
+              <div className="divide-y divide-gray-100">
+                {meta.import_summary.duplicates_skipped.map(r => (
+                  <div key={r.existing_single_id} className="px-4 py-2.5 flex items-start gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-[#1A1A1A]">{r.name}</p>
+                      <p className="text-xs text-[#888888] mt-0.5">
+                        {r.reason} — matched: <span className="text-orange-700">{r.existing_single_name}</span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

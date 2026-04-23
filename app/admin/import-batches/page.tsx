@@ -44,6 +44,7 @@ interface BatchRow {
   shadchan_name: string
   status: string
   shadchan_comments: string | null
+  import_summary: { new_records: unknown[]; duplicates_skipped: unknown[]; existing_updated: unknown[] } | null
   created_at: string
   updated_at: string
 }
@@ -118,6 +119,9 @@ export default function ImportBatchesPage() {
                   <th className="table-th">Created</th>
                   <th className="table-th">Shadchan</th>
                   <th className="table-th">Status</th>
+                  <th className="table-th">New</th>
+                  <th className="table-th">Updated</th>
+                  <th className="table-th">Skipped</th>
                   <th className="table-th">Shadchan Notes</th>
                   <th className="table-th">Actions</th>
                 </tr>
@@ -125,6 +129,7 @@ export default function ImportBatchesPage() {
               <tbody>
                 {batches.filter(b => b.status !== 'rejected').map(batch => {
                   const st = STATUS_LABELS[batch.status] ?? { label: batch.status, cls: 'bg-gray-100 text-gray-600' }
+                  const s = batch.import_summary
                   return (
                     <tr key={batch.id} className="table-row">
                       <td className="table-td text-[#555555]">
@@ -140,6 +145,15 @@ export default function ImportBatchesPage() {
                         {batch.status === 'shadchan_approved' && (
                           <span className="ml-2 inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                         )}
+                      </td>
+                      <td className="table-td text-center text-sm">
+                        {s ? <span className="text-green-700 font-medium">{s.new_records.length}</span> : <span className="text-[#BBBBBB]">—</span>}
+                      </td>
+                      <td className="table-td text-center text-sm">
+                        {s ? <span className="text-blue-700 font-medium">{s.existing_updated.length}</span> : <span className="text-[#BBBBBB]">—</span>}
+                      </td>
+                      <td className="table-td text-center text-sm">
+                        {s ? <span className="text-orange-600 font-medium">{s.duplicates_skipped.length}</span> : <span className="text-[#BBBBBB]">—</span>}
                       </td>
                       <td className="table-td text-[#555555] text-xs max-w-xs truncate">
                         {batch.shadchan_comments ?? '—'}

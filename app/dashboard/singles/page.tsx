@@ -130,17 +130,29 @@ export default function SinglesPage() {
       if (!profile) { setMyLoading(false); return }
       setProfileId(profile.id)
 
+      // Get my linked single IDs from junction table
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: singlesData } = await (supabase.from('singles') as any)
-        .select('id, first_name, last_name, gender, age, city, state, status, hashkafa, plans, height_inches, created_at')
-        .eq('created_by_shadchan_id', profile.id)
-        .order('created_at', { ascending: false }) as {
-          data: Array<{
-            id: string; first_name: string; last_name: string; gender: string
-            age: number | null; city: string | null; state: string | null; status: string
-            hashkafa: string | null; plans: string | null; height_inches: number | null; created_at: string
-          }> | null
-        }
+      const { data: junctionData } = await (supabase.from('shadchan_singles') as any)
+        .select('single_id')
+        .eq('shadchan_id', profile.id) as { data: Array<{ single_id: string }> | null }
+
+      const myIds = (junctionData ?? []).map((j: { single_id: string }) => j.single_id)
+
+      type SingleDataRow = {
+        id: string; first_name: string; last_name: string; gender: string
+        age: number | null; city: string | null; state: string | null; status: string
+        hashkafa: string | null; plans: string | null; height_inches: number | null; created_at: string
+      }
+
+      let singlesData: SingleDataRow[] | null = null
+      if (myIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = await (supabase.from('singles') as any)
+          .select('id, first_name, last_name, gender, age, city, state, status, hashkafa, plans, height_inches, created_at')
+          .in('id', myIds)
+          .order('created_at', { ascending: false }) as { data: SingleDataRow[] | null }
+        singlesData = res.data
+      }
 
       const rows = singlesData ?? []
 

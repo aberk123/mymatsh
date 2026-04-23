@@ -108,11 +108,21 @@ export interface Database {
           parsed_data: Json
           review_token: string
           shadchan_comments: string | null
+          import_summary: Json | null
           created_at: string
           updated_at: string
         }
         Insert: Omit<Database['public']['Tables']['import_batches']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['import_batches']['Insert']>
+      }
+      shadchan_singles: {
+        Row: {
+          shadchan_id: string
+          single_id: string
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['shadchan_singles']['Row'], 'created_at'>
+        Update: Partial<Database['public']['Tables']['shadchan_singles']['Insert']>
       }
       singles: {
         Row: {
@@ -498,3 +508,10 @@ export interface Database {
 
 export type Tables<T extends keyof Database['public']['Tables']> =
   Database['public']['Tables'][T]['Row']
+
+export interface ImportSummary {
+  completed_at: string
+  new_records: Array<{ name: string; gender: string | null; city: string | null; state: string | null; single_id: string }>
+  duplicates_skipped: Array<{ name: string; reason: string; existing_single_id: string; existing_single_name: string }>
+  existing_updated: Array<{ name: string; single_id: string; fields_added: string[]; fields_skipped: string[] }>
+}

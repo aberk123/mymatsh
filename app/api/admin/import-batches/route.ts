@@ -40,7 +40,7 @@ export async function GET() {
     const supabase = await getAdminClient()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase.from('import_batches') as any)
-      .select('id, shadchan_id, submitted_by_admin_id, status, review_token, shadchan_comments, created_at, updated_at')
+      .select('id, shadchan_id, submitted_by_admin_id, status, review_token, shadchan_comments, import_summary, created_at, updated_at')
       .order('created_at', { ascending: false }) as {
         data: Array<{
           id: string
@@ -49,6 +49,7 @@ export async function GET() {
           status: string
           review_token: string
           shadchan_comments: string | null
+          import_summary: Record<string, unknown> | null
           created_at: string
           updated_at: string
         }> | null

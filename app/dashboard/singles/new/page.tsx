@@ -14,6 +14,7 @@ import {
   UserCircle,
   ChevronLeft,
   AlertTriangle,
+  CheckCircle,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { AppLayout } from '@/components/ui/app-layout'
@@ -85,6 +86,7 @@ export default function NewSinglePage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [dupWarning, setDupWarning] = useState<string | null>(null)
+  const [mergeResult, setMergeResult] = useState<{ id: string; fields_added: string[]; fields_skipped: string[] } | null>(null)
 
   const {
     register,
@@ -122,6 +124,16 @@ export default function NewSinglePage() {
       if (!res.ok) {
         const json = await res.json()
         setSaveError(json.error ?? 'Failed to save. Please try again.')
+        return
+      }
+      const json = await res.json() as {
+        id: string
+        status: 'created' | 'merged'
+        fields_added?: string[]
+        fields_skipped?: string[]
+      }
+      if (json.status === 'merged') {
+        setMergeResult({ id: json.id, fields_added: json.fields_added ?? [], fields_skipped: json.fields_skipped ?? [] })
         return
       }
       router.push('/dashboard/singles')
@@ -180,7 +192,7 @@ export default function NewSinglePage() {
           </div>
         )}
 
-        {dupWarning && (
+        {dupWarning && !mergeResult && (
           <div className="mb-4 p-3 rounded-lg bg-orange-50 border border-orange-200 text-sm text-orange-700 flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
             <span>
@@ -190,8 +202,48 @@ export default function NewSinglePage() {
           </div>
         )}
 
+        {mergeResult && (
+          <div className="mb-6 p-5 rounded-xl bg-green-50 border border-green-200 space-y-4">
+            <div className="flex items-center gap-2 text-green-700">
+              <CheckCircle className="h-5 w-5 flex-shrink-0" />
+              <p className="font-semibold text-sm">Merged into existing record</p>
+            </div>
+            <p className="text-sm text-green-800">
+              This single already existed in the database. Your data was merged in — blank fields were filled, existing data was not overwritten.
+            </p>
+            {mergeResult.fields_added.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1.5">Fields added</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {mergeResult.fields_added.map(f => (
+                    <span key={f} className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{f}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {mergeResult.fields_skipped.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-[#888888] uppercase tracking-wide mb-1.5">Already filled (not overwritten)</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {mergeResult.fields_skipped.map(f => (
+                    <span key={f} className="text-xs bg-gray-100 text-[#555555] px-2 py-0.5 rounded-full">{f}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex gap-3 pt-1">
+              <Link href={`/dashboard/singles/${mergeResult.id}`}>
+                <Button variant="primary" size="sm">View Existing Record</Button>
+              </Link>
+              <Link href="/dashboard/singles">
+                <Button variant="secondary" size="sm">Back to My Singles</Button>
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Wizard Progress */}
-        <div className="card p-0 overflow-hidden">
+        {!mergeResult && <div className="card p-0 overflow-hidden">
           <WizardProgress steps={wizardSteps} currentStep={currentStep} />
 
           <form onSubmit={handleSubmit(onSubmit)}>
@@ -546,7 +598,7 @@ export default function NewSinglePage() {
               )}
             </div>
           </form>
-        </div>
+        </div>}
       </div>
     </AppLayout>
   )
