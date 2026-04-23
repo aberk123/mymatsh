@@ -74,6 +74,12 @@ interface SingleRow {
   state: string | null
   status: string
   shadchan_name: string
+  known_by_count: number
+}
+
+interface KnownByShadchan {
+  full_name: string
+  city: string
 }
 
 export default function AdminSinglesPage() {
@@ -90,6 +96,9 @@ export default function AdminSinglesPage() {
   const [newStatus, setNewStatus] = useState<SingleStatus>('available')
   const [statusSaving, setStatusSaving] = useState(false)
   const [statusError, setStatusError] = useState('')
+  const [knownByModalId, setKnownByModalId] = useState<string | null>(null)
+  const [knownByList, setKnownByList] = useState<KnownByShadchan[]>([])
+  const [knownByLoading, setKnownByLoading] = useState(false)
 
   // Debounce search
   useEffect(() => {
@@ -147,6 +156,20 @@ export default function AdminSinglesPage() {
       setStatusError('')
       setStatusModalId(id)
     }
+  }
+
+  async function openKnownByModal(singleId: string) {
+    setKnownByList([])
+    setKnownByModalId(singleId)
+    setKnownByLoading(true)
+    try {
+      const res = await fetch(`/api/admin/singles/${singleId}/known-by`)
+      if (res.ok) {
+        const json = await res.json()
+        setKnownByList(json.shadchanim ?? [])
+      }
+    } catch { /* ignore */ }
+    finally { setKnownByLoading(false) }
   }
 
   async function handleStatusSave() {
@@ -239,7 +262,8 @@ export default function AdminSinglesPage() {
                     <th className="table-th">Name</th>
                     <th className="table-th">Age</th>
                     <th className="table-th">City</th>
-                    <th className="table-th">Shadchan</th>
+                    <th className="table-th">Added By</th>
+                    <th className="table-th">Known By</th>
                     <th className="table-th">Status</th>
                     <th className="table-th">Actions</th>
                   </tr>
@@ -250,7 +274,16 @@ export default function AdminSinglesPage() {
                       <td className="table-td font-medium text-[#1A1A1A]">{s.first_name} {s.last_name}</td>
                       <td className="table-td text-[#555555]">{s.age ?? '—'}</td>
                       <td className="table-td text-[#555555]">{[s.city, s.state].filter(Boolean).join(', ') || '—'}</td>
-                      <td className="table-td text-[#555555]">{s.shadchan_name}</td>
+                      <td className="table-td text-[#555555] text-xs">{s.shadchan_name}</td>
+                      <td className="table-td">
+                        <button
+                          onClick={() => openKnownByModal(s.id)}
+                          className="text-brand-maroon font-semibold text-sm hover:underline"
+                          title="View shadchanim who have this single"
+                        >
+                          {s.known_by_count}
+                        </button>
+                      </td>
                       <td className="table-td"><StatusBadge status={s.status} /></td>
                       <td className="table-td">
                         <Button
@@ -267,7 +300,7 @@ export default function AdminSinglesPage() {
                   ))}
                   {singles.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="table-td text-center text-[#888888] py-8">
+                      <td colSpan={7} className="table-td text-center text-[#888888] py-8">
                         No {gender} found.
                       </td>
                     </tr>
@@ -287,6 +320,33 @@ export default function AdminSinglesPage() {
           </>
         )}
       </div>
+
+      <Dialog open={knownByModalId !== null} onOpenChange={(open) => { if (!open) setKnownByModalId(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Shadchanim Who Have This Single</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-4">
+            {knownByLoading ? (
+              <p className="text-sm text-[#888888] py-4 text-center">Loading…</p>
+            ) : knownByList.length === 0 ? (
+              <p className="text-sm text-[#888888] py-4 text-center">No shadchanim have added this single yet.</p>
+            ) : (
+              <div className="space-y-2 mt-2 max-h-64 overflow-y-auto">
+                {knownByList.map((sh, i) => (
+                  <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                    <span className="text-sm font-medium text-[#1A1A1A]">{sh.full_name}</span>
+                    <span className="text-xs text-[#888888]">{sh.city}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setKnownByModalId(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={statusModalId !== null} onOpenChange={(open) => { if (!open) setStatusModalId(null) }}>
         <DialogContent className="max-w-sm">

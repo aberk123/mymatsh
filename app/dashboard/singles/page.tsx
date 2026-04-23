@@ -15,11 +15,17 @@ import {
   Search,
   UserPlus,
   CheckCircle,
-  Clock,
   SlidersHorizontal,
   Star,
   X,
 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -60,7 +66,7 @@ interface ApiSingle {
   created_at: string
   shadchan_name: string
   labels: string[]
-  rep_status: string | null
+  in_my_list: boolean
   is_starred: boolean
 }
 
@@ -188,15 +194,25 @@ export default function SinglesPage() {
     setPage(1)
   }
 
-  const handleRepresent = useCallback(async (singleId: string) => {
-    const res = await fetch('/api/representation-requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ single_id: singleId }),
-    })
-    if (res.ok || res.status === 409) {
-      setSingles(prev => prev.map(s => s.id === singleId ? { ...s, rep_status: 'pending' } : s))
+  const [familiarityPopup, setFamiliarityPopup] = useState<string | null>(null)
+
+  const handleAddToList = useCallback(async (singleId: string) => {
+    setSingles(prev => prev.map(s => s.id === singleId ? { ...s, in_my_list: true } : s))
+    const res = await fetch(`/api/singles/${singleId}/add-to-my-list`, { method: 'POST' })
+    if (!res.ok) {
+      setSingles(prev => prev.map(s => s.id === singleId ? { ...s, in_my_list: false } : s))
+      return
     }
+    setFamiliarityPopup(singleId)
+  }, [])
+
+  const handleFamiliarityAnswer = useCallback(async (singleId: string, isFamiliar: boolean) => {
+    setFamiliarityPopup(null)
+    await fetch(`/api/singles/${singleId}/familiarity`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_familiar: isFamiliar }),
+    })
   }, [])
 
   const handleToggleStar = useCallback(async (singleId: string, currentlyStarred: boolean) => {
@@ -556,24 +572,15 @@ export default function SinglesPage() {
                     </Link>
                     {activeTab === 'all' && (
                       <>
-                        {s.rep_status === 'pending' && (
-                          <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded-full inline-flex items-center gap-1">
-                            <Clock className="h-3 w-3" />Pending
-                          </span>
-                        )}
-                        {s.rep_status === 'accepted' && (
+                        {s.in_my_list ? (
                           <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full inline-flex items-center gap-1">
-                            <CheckCircle className="h-3 w-3" />Representing
+                            <CheckCircle className="h-3 w-3" />Added
                           </span>
-                        )}
-                        {s.rep_status === 'declined' && (
-                          <span className="text-xs text-[#888888] bg-gray-100 px-2 py-1 rounded-full">Declined</span>
-                        )}
-                        {s.rep_status === null && (
+                        ) : (
                           <Button variant="ghost" size="sm" className="gap-1.5 min-h-[40px]"
-                            onClick={() => handleRepresent(s.id)}>
+                            onClick={() => handleAddToList(s.id)}>
                             <UserPlus className="h-3.5 w-3.5" />
-                            Represent
+                            Add to My List
                           </Button>
                         )}
                         {s.shadchan_name !== '—' && (
@@ -699,22 +706,13 @@ export default function SinglesPage() {
                             <Link href={`/dashboard/singles/${s.id}`}>
                               <Button variant="ghost" size="icon" className="h-7 w-7" title="View"><Eye className="h-3.5 w-3.5" /></Button>
                             </Link>
-                            {s.rep_status === 'pending' && (
-                              <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                                <Clock className="h-3 w-3" />Pending
-                              </span>
-                            )}
-                            {s.rep_status === 'accepted' && (
+                            {s.in_my_list ? (
                               <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                                <CheckCircle className="h-3 w-3" />Representing
+                                <CheckCircle className="h-3 w-3" />Added
                               </span>
-                            )}
-                            {s.rep_status === 'declined' && (
-                              <span className="text-xs text-[#888888] bg-gray-100 px-2 py-0.5 rounded-full">Declined</span>
-                            )}
-                            {s.rep_status === null && (
-                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => handleRepresent(s.id)}>
-                                <UserPlus className="h-3 w-3" />Represent
+                            ) : (
+                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => handleAddToList(s.id)}>
+                                <UserPlus className="h-3 w-3" />Add to My List
                               </Button>
                             )}
                           </div>
@@ -741,6 +739,26 @@ export default function SinglesPage() {
           )}
         </>
       )}
+      <Dialog open={familiarityPopup !== null} onOpenChange={(open) => { if (!open) setFamiliarityPopup(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Are you familiar with this single?</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-2">
+            <p className="text-sm text-[#555555]">
+              Are you personally familiar with this single — do you know them, their family, or their background?
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="secondary" onClick={() => familiarityPopup && handleFamiliarityAnswer(familiarityPopup, false)}>
+              No
+            </Button>
+            <Button variant="primary" onClick={() => familiarityPopup && handleFamiliarityAnswer(familiarityPopup, true)}>
+              Yes, I Know Them
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   )
 }

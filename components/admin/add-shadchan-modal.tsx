@@ -16,11 +16,12 @@ import { toast } from 'sonner'
 interface AddShadchanModalProps {
   open: boolean
   onClose: () => void
+  onSuccess?: (id: string, name: string) => void
 }
 
 const YEAR_OPTIONS = ['1–2 years', '3–5 years', '6–10 years', '11–20 years', '20+ years']
 
-export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
+export function AddShadchanModal({ open, onClose, onSuccess }: AddShadchanModalProps) {
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
@@ -54,13 +55,25 @@ export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
     const e = validate()
     if (Object.keys(e).length > 0) { setErrors(e); return }
     setSaving(true)
-    // TODO: POST /api/admin/users with role: 'shadchan', status: 'active' (admin-added = auto approved)
-    await new Promise((r) => setTimeout(r, 700))
-    setSaving(false)
-    toast.success(`${form.firstName} ${form.lastName} added as Shadchan`)
-    onClose()
-    setForm({ firstName: '', lastName: '', email: '', phone: '', city: '', state: '', yearsExperience: '1–2 years', reference: '', password: '' })
-    setErrors({})
+    try {
+      const res = await fetch('/api/admin/shadchanim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setErrors({ submit: json.error ?? 'Failed to add shadchan.' })
+        return
+      }
+      toast.success(`${form.firstName} ${form.lastName} added as Shadchan`)
+      onSuccess?.(json.id, json.name)
+      handleClose()
+    } catch {
+      setErrors({ submit: 'Network error. Please try again.' })
+    } finally {
+      setSaving(false)
+    }
   }
 
   function handleClose() {
@@ -82,7 +95,6 @@ export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
         </DialogHeader>
 
         <div className="px-6 pb-2 space-y-4">
-          {/* Name */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="field-label" required>First Name</Label>
@@ -106,7 +118,6 @@ export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
             </div>
           </div>
 
-          {/* Email */}
           <div>
             <Label className="field-label">Email</Label>
             <Input
@@ -119,7 +130,6 @@ export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
             {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
           </div>
 
-          {/* Phone */}
           <div>
             <Label className="field-label">Phone</Label>
             <Input
@@ -129,7 +139,6 @@ export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
             />
           </div>
 
-          {/* City / State */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="field-label">City</Label>
@@ -141,7 +150,6 @@ export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
             </div>
           </div>
 
-          {/* Years Experience */}
           <div>
             <Label className="field-label">Years of Experience</Label>
             <select
@@ -153,7 +161,6 @@ export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
             </select>
           </div>
 
-          {/* Reference */}
           <div>
             <Label className="field-label">Reference</Label>
             <Input
@@ -163,7 +170,6 @@ export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
             />
           </div>
 
-          {/* Password */}
           <div>
             <Label className="field-label" required>Temporary Password</Label>
             <Input
@@ -175,6 +181,10 @@ export function AddShadchanModal({ open, onClose }: AddShadchanModalProps) {
             />
             {errors.password && <p className="text-xs text-red-500 mt-1">{errors.password}</p>}
           </div>
+
+          {errors.submit && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{errors.submit}</p>
+          )}
         </div>
 
         <DialogFooter>

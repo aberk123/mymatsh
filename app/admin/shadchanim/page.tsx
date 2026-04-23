@@ -71,6 +71,8 @@ interface ApprovedShadchan {
   status: string
   matchesMade: number
   singlesManaged: number
+  addedBy: string
+  approvedBy: string
 }
 
 export default function AdminShadchanimPage() {
@@ -130,7 +132,7 @@ export default function AdminShadchanimPage() {
     // Approved: is_approved = true
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: approved } = await (supabase.from('shadchan_profiles') as any)
-      .select('id, user_id, full_name, city, state, email, approved_at')
+      .select('id, user_id, full_name, city, state, email, approved_at, approved_by_admin_id, created_by_admin_id')
       .eq('is_approved', true)
       .order('approved_at', { ascending: false }) as {
         data: Array<{
@@ -141,6 +143,8 @@ export default function AdminShadchanimPage() {
           state: string | null
           email: string | null
           approved_at: string | null
+          approved_by_admin_id: string | null
+          created_by_admin_id: string | null
         }> | null
       }
 
@@ -153,6 +157,21 @@ export default function AdminShadchanimPage() {
         .select('id, status')
         .in('id', approvedUserIds) as { data: Array<{ id: string; status: string }> | null }
       userStatuses = Object.fromEntries((userRows ?? []).map((u) => [u.id, u.status]))
+    }
+
+    // Resolve admin names for approved_by_admin_id and created_by_admin_id
+    const adminIdSet = new Set<string>()
+    for (const a of approved ?? []) {
+      if (a.approved_by_admin_id) adminIdSet.add(a.approved_by_admin_id)
+      if (a.created_by_admin_id) adminIdSet.add(a.created_by_admin_id)
+    }
+    const adminEmailMap: Record<string, string> = {}
+    if (adminIdSet.size > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: adminRows } = await (supabase.from('users') as any)
+        .select('id, email')
+        .in('id', Array.from(adminIdSet)) as { data: Array<{ id: string; email: string | null }> | null }
+      for (const r of adminRows ?? []) adminEmailMap[r.id] = r.email ?? r.id
     }
 
     setApprovedList(
@@ -169,6 +188,8 @@ export default function AdminShadchanimPage() {
         status: userStatuses[a.user_id] ?? 'active',
         matchesMade: 0,
         singlesManaged: 0,
+        addedBy: a.created_by_admin_id ? (adminEmailMap[a.created_by_admin_id] ?? '—') : 'Self-registered',
+        approvedBy: a.approved_by_admin_id ? (adminEmailMap[a.approved_by_admin_id] ?? '—') : '—',
       }))
     )
 
@@ -201,6 +222,8 @@ export default function AdminShadchanimPage() {
             status: 'active',
             matchesMade: 0,
             singlesManaged: 0,
+            addedBy: 'Self-registered',
+            approvedBy: 'You',
           },
           ...prev,
         ])
@@ -379,6 +402,8 @@ export default function AdminShadchanimPage() {
                   <th className="table-th">City</th>
                   <th className="table-th">Email</th>
                   <th className="table-th">Approved Date</th>
+                  <th className="table-th">Added By</th>
+                  <th className="table-th">Approved By</th>
                   <th className="table-th">Matches Made</th>
                   <th className="table-th">Singles Managed</th>
                   <th className="table-th">Status</th>
@@ -391,6 +416,8 @@ export default function AdminShadchanimPage() {
                     <td className="table-td text-[#555555]">{s.city}</td>
                     <td className="table-td text-[#555555]">{s.email}</td>
                     <td className="table-td text-[#555555]">{s.approvedDate}</td>
+                    <td className="table-td text-[#555555] text-xs">{s.addedBy}</td>
+                    <td className="table-td text-[#555555] text-xs">{s.approvedBy}</td>
                     <td className="table-td text-center">
                       <span className="font-semibold text-[#1A1A1A]">{s.matchesMade}</span>
                     </td>
@@ -404,7 +431,7 @@ export default function AdminShadchanimPage() {
                 ))}
                 {allFiltered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="table-td text-center text-[#888888] py-8">
+                    <td colSpan={9} className="table-td text-center text-[#888888] py-8">
                       No approved shadchanim yet.
                     </td>
                   </tr>
@@ -444,7 +471,28 @@ export default function AdminShadchanimPage() {
         </DialogContent>
       </Dialog>
 
-      <AddShadchanModal open={addOpen} onClose={() => setAddOpen(false)} />
+      <AddShadchanModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSuccess={(id, name) => {
+          setApprovedList((prev) => [
+            {
+              id,
+              name,
+              city: '—',
+              email: '—',
+              approvedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+              status: 'active',
+              matchesMade: 0,
+              singlesManaged: 0,
+              addedBy: 'You',
+              approvedBy: 'You',
+            },
+            ...prev,
+          ])
+          setTab('all')
+        }}
+      />
     </AppLayout>
   )
 }

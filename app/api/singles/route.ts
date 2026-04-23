@@ -234,15 +234,27 @@ export async function GET(request: Request) {
     for (const s of starData ?? []) starredSet.add(s.single_id)
   }
 
-  // Representation request status (all tab only)
-  const repMap: Record<string, string> = {}
+  // "In my list" flag for all tab (shadchan_singles membership)
+  const inMyListSet = new Set<string>()
   if (tab === 'all' && profileId && rows.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: repData } = await (adminClient.from('representation_requests') as any)
-      .select('single_id, status')
+    const { data: myListData } = await (adminClient.from('shadchan_singles') as any)
+      .select('single_id')
       .eq('shadchan_id', profileId)
-      .in('single_id', rows.map((s) => s.id)) as { data: Array<{ single_id: string; status: string }> | null }
-    for (const r of repData ?? []) repMap[r.single_id] = r.status
+      .in('single_id', rows.map((s) => s.id)) as { data: Array<{ single_id: string }> | null }
+    for (const r of myListData ?? []) inMyListSet.add(r.single_id)
+  }
+
+  // Known by count (number of shadchanim who have this single in their list) — admin only
+  const knownByMap: Record<string, number> = {}
+  if (role === 'platform_admin' && rows.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: kbData } = await (adminClient.from('shadchan_singles') as any)
+      .select('single_id')
+      .in('single_id', rows.map((s) => s.id)) as { data: Array<{ single_id: string }> | null }
+    for (const r of kbData ?? []) {
+      knownByMap[r.single_id] = (knownByMap[r.single_id] ?? 0) + 1
+    }
   }
 
   return NextResponse.json({
@@ -261,8 +273,9 @@ export async function GET(request: Request) {
       created_at: s.created_at,
       shadchan_name: shadchanMap[s.created_by_shadchan_id] ?? '—',
       labels: labelsBySingle[s.id] ?? [],
-      rep_status: repMap[s.id] ?? null,
+      in_my_list: inMyListSet.has(s.id),
       is_starred: starredSet.has(s.id),
+      known_by_count: knownByMap[s.id] ?? 0,
     })),
     total,
     page,

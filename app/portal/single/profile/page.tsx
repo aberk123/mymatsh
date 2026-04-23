@@ -227,6 +227,10 @@ export default function SingleProfilePage() {
   const [savingRefs, setSavingRefs] = useState(false)
   const [refsError, setRefsError] = useState('')
 
+  // ── Familiar Shadchanim ───────────────────────────────────────────────────────
+  const [familiarShadchanim, setFamiliarShadchanim] = useState<Array<{ full_name: string; city: string; phone: string | null }>>([])
+  const [familiarLoading, setFamiliarLoading] = useState(false)
+
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -345,6 +349,14 @@ export default function SingleProfilePage() {
             phone: r.phone ?? '', email: r.email ?? '', notes: r.notes ?? '',
           })))
         }
+
+        // Fetch familiar shadchanim (non-blocking)
+        setFamiliarLoading(true)
+        fetch(`/api/singles/${id}/familiar-shadchanim`)
+          .then(r => r.json())
+          .then(d => { if (d.shadchanim) setFamiliarShadchanim(d.shadchanim) })
+          .catch(() => { /* ignore */ })
+          .finally(() => setFamiliarLoading(false))
       } else {
         const meta = (user.user_metadata ?? {}) as Record<string, string>
         setPersonalValues(v => ({
@@ -775,6 +787,7 @@ export default function SingleProfilePage() {
               { value: 'looking', label: 'Looking For' },
               { value: 'family', label: 'Family' },
               { value: 'references', label: 'References' },
+              { value: 'shadchanim', label: 'Shadchanim' },
             ].map(tab => (
               <Tabs.Trigger
                 key={tab.value}
@@ -1160,6 +1173,35 @@ export default function SingleProfilePage() {
               </div>
             </div>
           )}
+        </Tabs.Content>
+
+        {/* ── Shadchanim Who Know Me ───────────────────────────────────────── */}
+        <Tabs.Content value="shadchanim">
+          <div className="card">
+            <h3 className="font-semibold text-[#1A1A1A] mb-1">Shadchanim Who Know Me</h3>
+            <p className="text-xs text-[#888888] mb-4">
+              These shadchanim have indicated that they are personally familiar with you and your background.
+            </p>
+            {familiarLoading ? (
+              <p className="text-sm text-[#888888] py-4 text-center">Loading…</p>
+            ) : familiarShadchanim.length === 0 ? (
+              <p className="text-sm text-[#888888] py-4 text-center">
+                No shadchanim have indicated familiarity with you yet.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {familiarShadchanim.map((sh, i) => (
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-[#FAFAFA]">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[#1A1A1A]">{sh.full_name}</p>
+                      <p className="text-xs text-[#888888] mt-0.5">{sh.city}</p>
+                      {sh.phone && <p className="text-xs text-[#555555] mt-0.5">{sh.phone}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </Tabs.Content>
       </Tabs.Root>
 

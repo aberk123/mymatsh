@@ -215,6 +215,8 @@ export default function SingleProfilePage() {
   const [family, setFamily] = useState<FamilyDetail | null>(null)
   const [references, setReferences] = useState<RefDetail[]>([])
   const [singlePhotos, setSinglePhotos] = useState<Array<{ id: string; public_url: string }>>([])
+  // Familiar shadchanim
+  const [familiarShadchanim, setFamiliarShadchanim] = useState<Array<{ full_name: string; city: string; phone: string | null }>>([])
   // Dating history
   const [datingHistory, setDatingHistory] = useState<DatingHistoryEntry[]>([])
   const [historyFormOpen, setHistoryFormOpen] = useState(false)
@@ -251,21 +253,23 @@ export default function SingleProfilePage() {
       setSingle(s)
 
       // Load supplemental data in parallel
-      const [eduRes, famRes, refsRes, photosRes, historyRes] = await Promise.all([
+      const [eduRes, famRes, refsRes, photosRes, historyRes, famShadRes] = await Promise.all([
         fetch(`/api/singles/${id}/education`),
         fetch(`/api/singles/${id}/family`),
         fetch(`/api/singles/${id}/references`),
         fetch(`/api/singles/${id}/photos`),
         fetch(`/api/singles/${id}/dating-history`),
+        fetch(`/api/singles/${id}/familiar-shadchanim`),
       ])
-      const [eduData, famData, refsData, photosData, historyData] = await Promise.all([
-        eduRes.json(), famRes.json(), refsRes.json(), photosRes.json(), historyRes.json(),
+      const [eduData, famData, refsData, photosData, historyData, famShadData] = await Promise.all([
+        eduRes.json(), famRes.json(), refsRes.json(), photosRes.json(), historyRes.json(), famShadRes.json(),
       ])
       if (eduData.education) setEducation(eduData.education)
       if (famData.family) setFamily(famData.family)
       if (refsData.references?.length) setReferences(refsData.references)
       if (photosData.photos?.length) setSinglePhotos(photosData.photos)
       if (historyData.history?.length) setDatingHistory(historyData.history)
+      if (famShadData.shadchanim?.length) setFamiliarShadchanim(famShadData.shadchanim)
 
       // Load matches
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -749,6 +753,26 @@ export default function SingleProfilePage() {
                   </div>
                 </div>
               </div>
+
+              <div className="lg:col-span-2 border-t border-gray-100 pt-4">
+                <SectionHeading>Shadchanim Familiar With This Single</SectionHeading>
+                {familiarShadchanim.length === 0 ? (
+                  <p className="text-sm text-[#888888] py-2">No shadchanim have indicated familiarity with this single yet.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                    {familiarShadchanim.map((sh, i) => (
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-[#FAFAFA] border border-gray-100">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[#1A1A1A]">{sh.full_name}</p>
+                          <p className="text-xs text-[#888888] mt-0.5">{sh.city}</p>
+                          {sh.phone && <p className="text-xs text-[#555555] mt-0.5">{sh.phone}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
             </div>
           )}
 

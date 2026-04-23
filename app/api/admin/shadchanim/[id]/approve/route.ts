@@ -60,7 +60,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
     .update({
       is_approved: true,
       approved_at: new Date().toISOString(),
-      approved_by: user.id,
+      approved_by_admin_id: user.id,
     })
     .eq('id', params.id)
 

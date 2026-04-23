@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { WizardProgress } from '@/components/ui/dialog'
+import { WizardProgress, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import type { NavItem } from '@/components/ui/sidebar'
 
 
@@ -147,6 +147,7 @@ export default function NewSinglePage() {
   const [saveError, setSaveError] = useState('')
   const [dupWarning, setDupWarning] = useState<string | null>(null)
   const [mergeResult, setMergeResult] = useState<{ id: string; fields_added: string[]; fields_skipped: string[] } | null>(null)
+  const [familiarityPopup, setFamiliarityPopup] = useState<string | null>(null)
 
   // Resume AI state
   const [resumeParsing, setResumeParsing] = useState(false)
@@ -289,7 +290,7 @@ export default function NewSinglePage() {
         setMergeResult({ id: json.id, fields_added: json.fields_added ?? [], fields_skipped: json.fields_skipped ?? [] })
         return
       }
-      router.push('/dashboard/singles')
+      setFamiliarityPopup(json.id)
     } catch {
       setSaveError('Network error. Please try again.')
     } finally {
@@ -878,6 +879,47 @@ export default function NewSinglePage() {
           </form>
         </div>}
       </div>
+
+      <Dialog open={familiarityPopup !== null} onOpenChange={(open) => { if (!open) { setFamiliarityPopup(null); router.push('/dashboard/singles') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Are you familiar with this single?</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-2">
+            <p className="text-sm text-[#555555]">
+              Are you personally familiar with this single — do you know them, their family, or their background?
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="secondary" onClick={async () => {
+              if (familiarityPopup) {
+                await fetch(`/api/singles/${familiarityPopup}/familiarity`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ is_familiar: false }),
+                })
+              }
+              setFamiliarityPopup(null)
+              router.push('/dashboard/singles')
+            }}>
+              No
+            </Button>
+            <Button variant="primary" onClick={async () => {
+              if (familiarityPopup) {
+                await fetch(`/api/singles/${familiarityPopup}/familiarity`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ is_familiar: true }),
+                })
+              }
+              setFamiliarityPopup(null)
+              router.push('/dashboard/singles')
+            }}>
+              Yes, I Know Them
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   )
 }
