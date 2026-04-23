@@ -96,6 +96,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to save user profile' }, { status: 500 })
     }
 
+    // For singles: create a linked singles record immediately so the profile page works
+    if (role === 'single') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: singleError } = await (adminClient.from('singles') as any).insert({
+        user_id: data.user.id,
+        first_name: firstName ?? '',
+        last_name: lastName ?? '',
+        email: email?.trim() || null,
+        phone: phone?.trim() || null,
+        status: 'draft',
+      })
+      if (singleError && process.env.NODE_ENV === 'development') {
+        console.error('[signup] failed to create singles record:', singleError)
+      }
+    }
+
     return NextResponse.json({ ok: true, status })
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

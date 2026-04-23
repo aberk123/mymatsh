@@ -308,11 +308,19 @@ export default function SingleProfilePage() {
           })
           if (Array.isArray(single.self_labels)) setSelfLabels(single.self_labels)
         } else {
-          const meta = user.user_metadata ?? {}
-          const fn = (meta.first_name as string) ?? ''
-          const ln = (meta.last_name as string) ?? ''
+          // No singles record yet — create one silently, then seed state from auth metadata
+          const meta = (user.user_metadata ?? {}) as Record<string, string>
+          const fn = meta.first_name ?? ''
+          const ln = meta.last_name ?? ''
           const email = user.email ?? ''
           const phone = user.phone ?? ''
+
+          const ensureRes = await fetch('/api/singles/ensure-profile', { method: 'POST' })
+          if (ensureRes.ok) {
+            const ensureJson = await ensureRes.json() as { id: string }
+            setSingleId(ensureJson.id)
+          }
+
           setProfile(p => ({ ...p, first_name: fn, last_name: ln, email, phone }))
           setEditValues(v => ({ ...v, first_name: fn, last_name: ln, email, phone }))
         }
