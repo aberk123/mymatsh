@@ -20,6 +20,7 @@ import {
   XCircle,
   Link,
   AlertTriangle,
+  AlertCircle,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
@@ -395,7 +396,9 @@ export default function ImportBatchDetailPage() {
                       className={[
                         'border-b border-gray-100',
                         record._skip ? 'opacity-40' : '',
-                        record._is_duplicate && !record._skip ? 'bg-orange-50/40' : '',
+                        record.parse_method === 'failed' && !record._skip ? 'bg-red-50' : '',
+                        record.parse_method !== 'failed' && record.parse_confidence === 'low' && !record._skip ? 'bg-yellow-50/60' : '',
+                        record._is_duplicate && !record._skip && record.parse_method !== 'failed' && record.parse_confidence !== 'low' ? 'bg-orange-50/40' : '',
                       ].join(' ')}
                     >
                       {/* Skip */}
@@ -567,12 +570,31 @@ export default function ImportBatchDetailPage() {
 
                       {/* Flags */}
                       <td className="px-2 py-1.5">
-                        {record._is_duplicate && !record._skip && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                            <AlertTriangle className="h-3 w-3" />
-                            {record._duplicate_match ?? 'Dup'}
-                          </span>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          {record.parse_method === 'failed' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-700 bg-red-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              <AlertCircle className="h-3 w-3" />
+                              AI failed
+                            </span>
+                          )}
+                          {record.parse_method === 'ai' && record.parse_confidence === 'low' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-yellow-700 bg-yellow-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              <AlertTriangle className="h-3 w-3" />
+                              Low confidence
+                            </span>
+                          )}
+                          {record.parse_method === 'ai' && record.parse_confidence && record.parse_confidence !== 'low' && (
+                            <span className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              AI · {record.parse_confidence}
+                            </span>
+                          )}
+                          {record._is_duplicate && !record._skip && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              <AlertTriangle className="h-3 w-3" />
+                              {record._duplicate_match ?? 'Dup'}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )
