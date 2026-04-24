@@ -29,14 +29,25 @@ export async function POST(request: Request) {
       }
     )
 
-    // Fire and forget — never reveal whether the email exists
-    await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`,
+    // Use the configured app URL, falling back to the Vercel URL if still pointing at localhost
+    const rawAppUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
+    const appUrl =
+      rawAppUrl && !rawAppUrl.startsWith('http://localhost') && !rawAppUrl.startsWith('http://127.')
+        ? rawAppUrl
+        : 'https://mymatsh.vercel.app'
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${appUrl}/reset-password`,
     })
 
+    if (error) {
+      console.error('[forgot-password] resetPasswordForEmail error:', error.message, '| redirectTo:', `${appUrl}/reset-password`)
+    }
+
+    // Always return ok — never reveal whether the email exists
     return NextResponse.json({ ok: true })
-  } catch {
-    // Always return ok to avoid leaking account existence
+  } catch (err) {
+    console.error('[forgot-password] unexpected error:', err)
     return NextResponse.json({ ok: true })
   }
 }

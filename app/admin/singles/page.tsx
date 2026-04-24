@@ -280,14 +280,18 @@ export default function AdminSinglesPage() {
                 </thead>
                 <tbody>
                   {singles.map((s) => (
-                    <tr key={s.id} className="table-row">
+                    <tr
+                      key={s.id}
+                      className="table-row cursor-pointer hover:bg-gray-50"
+                      onClick={() => router.push(`/admin/singles/${s.id}`)}
+                    >
                       <td className="table-td font-medium text-[#1A1A1A]">{s.first_name} {s.last_name}</td>
                       <td className="table-td text-[#555555]">{s.age ?? '—'}</td>
                       <td className="table-td text-[#555555]">{[s.city, s.state].filter(Boolean).join(', ') || '—'}</td>
                       <td className="table-td text-[#555555] text-xs">{s.shadchan_name}</td>
                       <td className="table-td">
                         <button
-                          onClick={() => openKnownByModal(s.id)}
+                          onClick={(e) => { e.stopPropagation(); openKnownByModal(s.id) }}
                           className="text-brand-maroon font-semibold text-sm hover:underline"
                           title="View shadchanim who have this single"
                         >
@@ -300,7 +304,7 @@ export default function AdminSinglesPage() {
                           variant="ghost"
                           size="sm"
                           className="gap-1"
-                          onClick={() => openStatusModal(s.id)}
+                          onClick={(e) => { e.stopPropagation(); openStatusModal(s.id) }}
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
                           Update Status
