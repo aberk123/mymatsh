@@ -13,6 +13,8 @@ import {
   Search,
   ShieldOff,
   ShieldCheck,
+  CheckCircle,
+  XCircle,
   UserPlus,
   UsersRound,
   Home,
@@ -64,6 +66,8 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1)
   const [addUserOpen, setAddUserOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  // maps users.id → shadchan_profiles.id for shadchan-role users
+  const [shadchanProfileMap, setShadchanProfileMap] = useState<Record<string, string>>({})
   const pageSize = 10
 
   useEffect(() => {
@@ -76,6 +80,21 @@ export default function AdminUsersPage() {
         .order('created_at', { ascending: false }) as { data: UserRow[] | null }
 
       setUsers(rows ?? [])
+
+      // Pre-fetch shadchan_profiles ids so approve/reject know which profile to target
+      const shadchanUserIds = (rows ?? [])
+        .filter((u: UserRow) => u.role === 'shadchan')
+        .map((u: UserRow) => u.id)
+      if (shadchanUserIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: profiles } = await (supabase.from('shadchan_profiles') as any)
+          .select('id, user_id')
+          .in('user_id', shadchanUserIds) as { data: Array<{ id: string; user_id: string }> | null }
+        const map: Record<string, string> = {}
+        for (const p of profiles ?? []) map[p.user_id] = p.id
+        setShadchanProfileMap(map)
+      }
+
       setLoading(false)
     }
 
@@ -97,6 +116,34 @@ export default function AdminUsersPage() {
   const activeCount = users.filter((u) => u.status === 'active').length
   const pendingCount = users.filter((u) => u.status === 'pending').length
   const suspendedCount = users.filter((u) => u.status === 'suspended').length
+
+  async function handleApproveShadchan(userId: string) {
+    const profileId = shadchanProfileMap[userId]
+    if (!profileId) return
+    setActionLoading(userId)
+    try {
+      const res = await fetch(`/api/admin/shadchanim/${profileId}/approve`, { method: 'POST' })
+      if (res.ok) {
+        setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: 'active' } : u))
+      }
+    } catch { /* ignore */ } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleRejectShadchan(userId: string) {
+    const profileId = shadchanProfileMap[userId]
+    if (!profileId) return
+    setActionLoading(userId)
+    try {
+      const res = await fetch(`/api/admin/shadchanim/${profileId}/reject`, { method: 'POST' })
+      if (res.ok) {
+        setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: 'suspended' } : u))
+      }
+    } catch { /* ignore */ } finally {
+      setActionLoading(null)
+    }
+  }
 
   async function handleStatusChange(userId: string, newStatus: string) {
     setActionLoading(userId)
@@ -206,7 +253,29 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="table-td">
                         <div className="flex items-center gap-1">
-                          {user.status === 'suspended' ? (
+                          {user.role === 'shadchan' && user.status === 'pending' ? (
+                            <>
+                              <Button
+                                size="sm"
+                                className="gap-1 bg-green-600 hover:bg-green-700 text-white border-green-600"
+                                disabled={actionLoading === user.id || !shadchanProfileMap[user.id]}
+                                onClick={() => handleApproveShadchan(user.id)}
+                              >
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Approve
+                              </Button>
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                className="gap-1"
+                                disabled={actionLoading === user.id || !shadchanProfileMap[user.id]}
+                                onClick={() => handleRejectShadchan(user.id)}
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                                Reject
+                              </Button>
+                            </>
+                          ) : user.status === 'suspended' ? (
                             <Button
                               variant="secondary"
                               size="sm"
@@ -217,7 +286,7 @@ export default function AdminUsersPage() {
                               <ShieldCheck className="h-3.5 w-3.5" />
                               Activate
                             </Button>
-                          ) : user.status !== 'suspended' ? (
+                          ) : (
                             <Button
                               variant="danger"
                               size="sm"
@@ -228,7 +297,7 @@ export default function AdminUsersPage() {
                               <ShieldOff className="h-3.5 w-3.5" />
                               Suspend
                             </Button>
-                          ) : null}
+                          )}
                         </div>
                       </td>
                     </tr>
