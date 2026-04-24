@@ -40,24 +40,14 @@ export async function POST(_request: Request, { params }: { params: { id: string
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  // params.id is the users.id — look up profile by user_id (avoids client-side RLS issue)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profile, error: fetchError } = await (adminClient.from('shadchan_profiles') as any)
-    .select('user_id')
-    .eq('user_id', params.id)
-    .maybeSingle() as { data: { user_id: string } | null; error: unknown }
-
-  if (fetchError || !profile) {
-    return NextResponse.json({ error: 'Shadchan profile not found' }, { status: 404 })
-  }
-
-  // Suspend the user account so they cannot log in
+  // params.id is users.id — suspend directly, no profile row required
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: userError } = await (adminClient.from('users') as any)
     .update({ status: 'suspended' })
-    .eq('id', profile.user_id)
+    .eq('id', params.id)
 
   if (userError) {
+    console.error('[reject] users update error:', userError)
     return NextResponse.json({ error: (userError as { message: string }).message }, { status: 500 })
   }
 

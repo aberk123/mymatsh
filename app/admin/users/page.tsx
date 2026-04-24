@@ -104,10 +104,15 @@ export default function AdminUsersPage() {
     setActionLoading(userId)
     try {
       const res = await fetch(`/api/admin/shadchanim/${userId}/approve`, { method: 'POST' })
+      const body = await res.json().catch(() => ({}))
       if (res.ok) {
         setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: 'active' } : u))
+      } else {
+        console.error('[approve]', res.status, body)
       }
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      console.error('[approve] fetch error', err)
+    } finally {
       setActionLoading(null)
     }
   }
@@ -116,10 +121,15 @@ export default function AdminUsersPage() {
     setActionLoading(userId)
     try {
       const res = await fetch(`/api/admin/shadchanim/${userId}/reject`, { method: 'POST' })
+      const body = await res.json().catch(() => ({}))
       if (res.ok) {
         setUsers((prev) => prev.filter((u) => u.id !== userId))
+      } else {
+        console.error('[reject]', res.status, body)
       }
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      console.error('[reject] fetch error', err)
+    } finally {
       setActionLoading(null)
     }
   }

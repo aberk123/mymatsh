@@ -44,41 +44,36 @@ export async function POST(_request: Request, { params }: { params: { id: string
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  // params.id is the users.id — look up profile by user_id (avoids client-side RLS issue)
+  // params.id is users.id — update users table first (always works, no profile required)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profile, error: fetchError } = await (adminClient.from('shadchan_profiles') as any)
-    .select('id, user_id, phone, email, full_name')
-    .eq('user_id', params.id)
-    .maybeSingle() as { data: { id: string; user_id: string; phone: string | null; email: string | null; full_name: string } | null; error: unknown }
+  const { error: userError } = await (adminClient.from('users') as any)
+    .update({ status: 'active' })
+    .eq('id', params.id)
 
-  if (fetchError || !profile) {
-    return NextResponse.json({ error: 'Shadchan profile not found' }, { status: 404 })
+  if (userError) {
+    console.error('[approve] users update error:', userError)
+    return NextResponse.json({ error: (userError as { message: string }).message }, { status: 500 })
   }
 
+  // Update shadchan_profiles if a row exists — silently skip if not (pre-fix signups)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: profileError } = await (adminClient.from('shadchan_profiles') as any)
+  await (adminClient.from('shadchan_profiles') as any)
     .update({
       is_approved: true,
       approved_at: new Date().toISOString(),
       approved_by_admin_id: user.id,
     })
-    .eq('id', profile.id)
+    .eq('user_id', params.id)
 
-  if (profileError) {
-    return NextResponse.json({ error: (profileError as { message: string }).message }, { status: 500 })
-  }
-
+  // Fetch profile for notification contact details — optional, don't fail if missing
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: userError } = await (adminClient.from('users') as any)
-    .update({ status: 'active' })
-    .eq('id', profile.user_id)
-
-  if (userError) {
-    return NextResponse.json({ error: (userError as { message: string }).message }, { status: 500 })
-  }
+  const { data: profile } = await (adminClient.from('shadchan_profiles') as any)
+    .select('phone, email, full_name')
+    .eq('user_id', params.id)
+    .maybeSingle() as { data: { phone: string | null; email: string | null; full_name: string } | null }
 
   // In-app notification
-  await createNotification(profile.user_id, 'shadchan_approved', {
+  await createNotification(params.id, 'shadchan_approved', {
     message: 'Your shadchan application has been approved. You can now log in.',
     link: '/dashboard',
   })
@@ -88,16 +83,17 @@ export async function POST(_request: Request, { params }: { params: { id: string
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: userRow } = await (adminClient.from('users') as any)
       .select('email, email_notifications, sms_notifications')
-      .eq('id', profile.user_id)
+      .eq('id', params.id)
       .maybeSingle() as { data: { email: string | null; email_notifications: boolean; sms_notifications: boolean } | null }
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://mymatsh.com'
-    const toEmail = userRow?.email ?? profile.email
-    const toPhone = profile.phone
+    const toEmail = userRow?.email ?? profile?.email
+    const toPhone = profile?.phone
+    const fullName = profile?.full_name || 'there'
 
     if (userRow?.email_notifications !== false && toEmail) {
       const html = emailTemplate(
-        `<p>Shalom ${profile.full_name || 'there'},</p>
+        `<p>Shalom ${fullName},</p>
          <p>We are pleased to let you know that your MyMatSH shadchan application has been <strong>approved</strong>.</p>
          <p>You can now log in to your dashboard and start managing your singles.</p>`,
         'Go to My Dashboard',
