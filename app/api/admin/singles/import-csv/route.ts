@@ -66,15 +66,15 @@ export async function POST(request: Request) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  const body = await request.json() as { rows: CsvRow[]; shadchan_id: string }
+  const body = await request.json() as { rows: CsvRow[]; shadchan_id?: string }
   const { rows, shadchan_id } = body
 
-  if (!shadchan_id) return NextResponse.json({ error: 'shadchan_id is required' }, { status: 400 })
   if (!Array.isArray(rows) || rows.length === 0) return NextResponse.json({ error: 'No rows provided' }, { status: 400 })
 
   let imported = 0
   let duplicates = 0
   let errors = 0
+  let unassigned = 0
   const errorDetails: string[] = []
 
   for (const row of rows) {
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       first_name: fn,
       last_name: ln,
       gender,
-      created_by_shadchan_id: shadchan_id,
+      created_by_shadchan_id: shadchan_id || null,
       status: 'draft',
     }
 
@@ -145,8 +145,9 @@ export async function POST(request: Request) {
       errorDetails.push(`${fn} ${ln}: ${(insertError as { message: string }).message}`)
     } else {
       imported++
+      if (!shadchan_id) unassigned++
     }
   }
 
-  return NextResponse.json({ imported, duplicates, errors, error_details: errorDetails.slice(0, 20) })
+  return NextResponse.json({ imported, duplicates, errors, unassigned, error_details: errorDetails.slice(0, 20) })
 }

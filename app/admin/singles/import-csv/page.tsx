@@ -144,6 +144,7 @@ interface ImportResult {
   imported: number
   duplicates: number
   errors: number
+  unassigned: number
   error_details: string[]
 }
 
@@ -247,7 +248,7 @@ export default function ImportCsvPage() {
   const hasFirstName = mappedFields.has('first_name')
   const hasLastName = mappedFields.has('last_name')
   const hasGender = mappedFields.has('gender')
-  const canImport = hasFirstName && hasLastName && hasGender && !!selectedShadchan && totalRows > 0
+  const canImport = hasFirstName && hasLastName && hasGender && totalRows > 0
 
   return (
     <AppLayout navItems={navItems} title="Import Singles from CSV" role="platform_admin">
@@ -270,19 +271,19 @@ export default function ImportCsvPage() {
         {phase === 'upload' && (
           <div className="card space-y-5">
             <div>
-              <Label className="field-label">Assign to Shadchan</Label>
+              <Label className="field-label">Assign to Shadchan <span className="text-[#888888] font-normal">(optional)</span></Label>
               <select
                 className="input-base mt-1 w-full"
                 value={selectedShadchan}
                 onChange={e => setSelectedShadchan(e.target.value)}
               >
-                <option value="">— Select a shadchan —</option>
+                <option value="">No shadchan assigned (import without shadchan)</option>
                 {shadchanim.map(s => (
                   <option key={s.id} value={s.id}>{s.full_name}</option>
                 ))}
               </select>
               <p className="text-xs text-[#888888] mt-1">
-                Imported singles will be assigned to this shadchan as their creator.
+                Leave unselected to import singles without a shadchan assignment.
               </p>
             </div>
 
@@ -331,21 +332,19 @@ export default function ImportCsvPage() {
         {phase === 'map' && (
           <div className="space-y-5">
             {/* Shadchan selector (repeated for convenience) */}
-            {!selectedShadchan && (
-              <div className="card p-4">
-                <Label className="field-label">Assign to Shadchan</Label>
-                <select
-                  className="input-base mt-1 w-full"
-                  value={selectedShadchan}
-                  onChange={e => setSelectedShadchan(e.target.value)}
-                >
-                  <option value="">— Select a shadchan —</option>
-                  {shadchanim.map(s => (
-                    <option key={s.id} value={s.id}>{s.full_name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="card p-4">
+              <Label className="field-label">Assign to Shadchan <span className="text-[#888888] font-normal">(optional)</span></Label>
+              <select
+                className="input-base mt-1 w-full"
+                value={selectedShadchan}
+                onChange={e => setSelectedShadchan(e.target.value)}
+              >
+                <option value="">No shadchan assigned (import without shadchan)</option>
+                {shadchanim.map(s => (
+                  <option key={s.id} value={s.id}>{s.full_name}</option>
+                ))}
+              </select>
+            </div>
 
             {/* Column mapping */}
             <div className="card">
@@ -487,7 +486,6 @@ export default function ImportCsvPage() {
 
             {!canImport && !importing && (
               <p className="text-xs text-[#888888] text-right -mt-3">
-                {!selectedShadchan && 'Select a shadchan · '}
                 {(!hasFirstName || !hasLastName || !hasGender) && 'Map required fields (First Name, Last Name, Gender)'}
               </p>
             )}
@@ -521,6 +519,16 @@ export default function ImportCsvPage() {
                 <p className={`text-sm mt-1 ${result.errors > 0 ? 'text-red-600' : 'text-gray-500'}`}>Errors</p>
               </div>
             </div>
+
+            {result.unassigned > 0 && (
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-blue-700">
+                  <span className="font-semibold">{result.unassigned}</span> of the imported singles have no shadchan assigned.
+                  You can assign them later from the Singles list.
+                </p>
+              </div>
+            )}
 
             {result.error_details.length > 0 && (
               <div className="rounded-lg bg-red-50 border border-red-200 p-4">
