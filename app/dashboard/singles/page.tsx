@@ -223,6 +223,18 @@ export default function SinglesPage() {
     }
   }, [])
 
+  const handleStatusUpdate = useCallback(async (singleId: string, newStatus: string, prevStatus: string | null) => {
+    setSingles(prev => prev.map(s => s.id === singleId ? { ...s, status: newStatus } : s))
+    const res = await fetch(`/api/singles/${singleId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    })
+    if (!res.ok) {
+      setSingles(prev => prev.map(s => s.id === singleId ? { ...s, status: prevStatus } : s))
+    }
+  }, [])
+
   // Secondary filters panel (shared between desktop card and mobile drawer)
   function FilterControls() {
     return (
@@ -371,13 +383,21 @@ export default function SinglesPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-4">
         <h1 className="text-xl font-semibold text-[#1A1A1A]">Singles</h1>
-        <Link href="/dashboard/singles/new">
-          <Button variant="primary" size="md" className="gap-2 min-h-[44px]">
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Add New Single</span>
-            <span className="sm:hidden">Add</span>
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/singles/quick-add">
+            <Button variant="secondary" size="md" className="gap-2 min-h-[44px]">
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Quick Add</span>
+            </Button>
+          </Link>
+          <Link href="/dashboard/singles/new">
+            <Button variant="primary" size="md" className="gap-2 min-h-[44px]">
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add New Single</span>
+              <span className="sm:hidden">Add</span>
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -543,7 +563,22 @@ export default function SinglesPage() {
                         {s.hashkafa ? ` · ${s.hashkafa.replace('_', ' ')}` : ''}
                       </p>
                     </div>
-                    <StatusBadge status={s.status ?? 'available'} />
+                    {activeTab === 'mine' ? (
+                      <select
+                        className="input-base text-xs py-0.5 px-1.5 w-auto min-w-[100px] flex-shrink-0"
+                        value={s.status ?? 'available'}
+                        onChange={(e) => handleStatusUpdate(s.id, e.target.value, s.status)}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="available">Available</option>
+                        <option value="on_hold">On Hold</option>
+                        <option value="engaged">Engaged</option>
+                        <option value="married">Married</option>
+                        <option value="inactive">Inactive</option>
+                      </select>
+                    ) : (
+                      <StatusBadge status={s.status ?? 'available'} />
+                    )}
                   </div>
                   {s.labels.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-2">
@@ -632,7 +667,20 @@ export default function SinglesPage() {
                         <td className="table-td text-[#555555]">{s.age ?? '—'}</td>
                         <td className="table-td text-[#555555]">{[s.city, s.state].filter(Boolean).join(', ') || '—'}</td>
                         <td className="table-td text-[#555555] capitalize">{(s.hashkafa ?? '—').replace('_', ' ')}</td>
-                        <td className="table-td"><StatusBadge status={s.status ?? 'available'} /></td>
+                        <td className="table-td">
+                          <select
+                            className="input-base text-xs py-0.5 px-1.5 w-auto min-w-[110px]"
+                            value={s.status ?? 'available'}
+                            onChange={(e) => handleStatusUpdate(s.id, e.target.value, s.status)}
+                          >
+                            <option value="draft">Draft</option>
+                            <option value="available">Available</option>
+                            <option value="on_hold">On Hold</option>
+                            <option value="engaged">Engaged</option>
+                            <option value="married">Married</option>
+                            <option value="inactive">Inactive</option>
+                          </select>
+                        </td>
                         <td className="table-td">
                           <div className="flex flex-wrap gap-1">
                             {s.labels.map(label => (

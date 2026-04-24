@@ -371,6 +371,7 @@ export default function NewSinglePage() {
                     id="resume-upload"
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png,.webp"
+                    capture="environment"
                     className="hidden"
                     onChange={handleResumeUpload}
                     disabled={resumeParsing}

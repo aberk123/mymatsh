@@ -12,6 +12,11 @@ import {
   UserCircle,
   Save,
   User,
+  Plus,
+  Pencil,
+  Trash2,
+  Check,
+  X,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { Button } from '@/components/ui/button'
@@ -32,7 +37,7 @@ const navItems: NavItem[] = [
   { label: 'My Profile', href: '/dashboard/profile', icon: UserCircle },
 ]
 
-type Tab = 'profile' | 'availability' | 'references'
+type Tab = 'profile' | 'availability' | 'references' | 'labels'
 
 const LANGUAGE_OPTIONS = ['English', 'Hebrew', 'Yiddish', 'French', 'Russian', 'Spanish']
 const CONTACT_OPTIONS = ['Email', 'Phone', 'WhatsApp', 'Text']
@@ -104,6 +109,19 @@ export default function ProfilePage() {
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [smsNotifications, setSmsNotifications] = useState(true)
 
+  // Labels tab state
+  interface LabelItem { id: string; name: string; color: string }
+  const [labelsList, setLabelsList] = useState<LabelItem[]>([])
+  const [labelsLoading, setLabelsLoading] = useState(false)
+  const [newLabelName, setNewLabelName] = useState('')
+  const [newLabelColor, setNewLabelColor] = useState('#7C3D52')
+  const [addingLabel, setAddingLabel] = useState(false)
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null)
+  const [editLabelName, setEditLabelName] = useState('')
+  const [editLabelColor, setEditLabelColor] = useState('')
+  const [savingLabelId, setSavingLabelId] = useState<string | null>(null)
+  const [deletingLabelId, setDeletingLabelId] = useState<string | null>(null)
+
   useEffect(() => {
     async function load() {
       const supabase = createClient()
@@ -160,6 +178,64 @@ export default function ProfilePage() {
     }
     load()
   }, [])
+
+  async function loadLabels() {
+    setLabelsLoading(true)
+    const res = await fetch('/api/shadchan/labels')
+    if (res.ok) {
+      const { labels } = await res.json() as { labels: LabelItem[] }
+      setLabelsList(labels)
+    }
+    setLabelsLoading(false)
+  }
+
+  async function handleAddLabel() {
+    if (!newLabelName.trim()) return
+    setAddingLabel(true)
+    const res = await fetch('/api/shadchan/labels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newLabelName.trim(), color: newLabelColor }),
+    })
+    if (res.ok) {
+      const { label } = await res.json() as { label: LabelItem }
+      setLabelsList(prev => [...prev, label].sort((a, b) => a.name.localeCompare(b.name)))
+      setNewLabelName('')
+    } else {
+      const { error } = await res.json()
+      toast.error(error ?? 'Failed to add label.')
+    }
+    setAddingLabel(false)
+  }
+
+  async function handleSaveLabel(id: string) {
+    setSavingLabelId(id)
+    const res = await fetch(`/api/shadchan/labels/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: editLabelName.trim(), color: editLabelColor }),
+    })
+    if (res.ok) {
+      const { label } = await res.json() as { label: LabelItem }
+      setLabelsList(prev => prev.map(l => l.id === id ? label : l).sort((a, b) => a.name.localeCompare(b.name)))
+      setEditingLabelId(null)
+    } else {
+      const { error } = await res.json()
+      toast.error(error ?? 'Failed to save label.')
+    }
+    setSavingLabelId(null)
+  }
+
+  async function handleDeleteLabel(id: string) {
+    setDeletingLabelId(id)
+    const res = await fetch(`/api/shadchan/labels/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setLabelsList(prev => prev.filter(l => l.id !== id))
+    } else {
+      toast.error('Failed to delete label.')
+    }
+    setDeletingLabelId(null)
+  }
 
   function toggleLanguage(lang: string) {
     setLanguages((prev) =>
@@ -218,6 +294,7 @@ export default function ProfilePage() {
     { id: 'profile',      label: 'Profile'                },
     { id: 'availability', label: 'Availability & Contact' },
     { id: 'references',   label: 'References & Settings'  },
+    { id: 'labels',       label: 'My Labels'              },
   ]
 
   if (loading) {
@@ -250,7 +327,10 @@ export default function ProfilePage() {
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              setActiveTab(tab.id)
+              if (tab.id === 'labels' && labelsList.length === 0 && !labelsLoading) loadLabels()
+            }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-brand-maroon text-white'
@@ -535,21 +615,131 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Desktop save button */}
-        <div className="mt-4 hidden sm:flex justify-end">
-          <Button onClick={handleSave} className="btn-primary gap-2" disabled={saving}>
-            <Save className="h-4 w-4" />
-            {saving ? 'Saving…' : 'Save Profile'}
-          </Button>
-        </div>
+        {activeTab === 'labels' && (
+          <div className="card space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-[#1A1A1A]">My Labels</h3>
+              <p className="text-xs text-[#888888]">Use labels to organize and categorize your singles.</p>
+            </div>
 
-        {/* Mobile sticky save bar */}
-        <div className="sm:hidden fixed bottom-16 inset-x-0 z-10 bg-white border-t border-gray-100 px-4 py-3">
-          <Button onClick={handleSave} className="btn-primary gap-2 w-full" disabled={saving}>
-            <Save className="h-4 w-4" />
-            {saving ? 'Saving…' : 'Save Profile'}
-          </Button>
-        </div>
+            {/* Add new label */}
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={newLabelColor}
+                onChange={(e) => setNewLabelColor(e.target.value)}
+                className="h-9 w-9 rounded cursor-pointer border border-gray-300 p-0.5"
+                title="Pick label color"
+              />
+              <Input
+                className="input-base flex-1"
+                placeholder="New label name…"
+                value={newLabelName}
+                onChange={(e) => setNewLabelName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddLabel() } }}
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                className="gap-1 whitespace-nowrap"
+                disabled={addingLabel || !newLabelName.trim()}
+                onClick={handleAddLabel}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add
+              </Button>
+            </div>
+
+            {/* Labels list */}
+            {labelsLoading ? (
+              <p className="text-sm text-[#888888] text-center py-6">Loading…</p>
+            ) : labelsList.length === 0 ? (
+              <p className="text-sm text-[#888888] text-center py-6">No labels yet. Add your first label above.</p>
+            ) : (
+              <div className="space-y-2">
+                {labelsList.map((lbl) => (
+                  <div key={lbl.id} className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 bg-gray-50">
+                    {editingLabelId === lbl.id ? (
+                      <>
+                        <input
+                          type="color"
+                          value={editLabelColor}
+                          onChange={(e) => setEditLabelColor(e.target.value)}
+                          className="h-8 w-8 rounded cursor-pointer border border-gray-300 p-0.5 flex-shrink-0"
+                        />
+                        <Input
+                          className="input-base flex-1 text-sm"
+                          value={editLabelName}
+                          onChange={(e) => setEditLabelName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveLabel(lbl.id) }}
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleSaveLabel(lbl.id)}
+                          disabled={savingLabelId === lbl.id}
+                          className="p-1.5 rounded hover:bg-green-100 text-green-600"
+                          title="Save"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setEditingLabelId(null)}
+                          className="p-1.5 rounded hover:bg-gray-200 text-[#888888]"
+                          title="Cancel"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span
+                          className="w-4 h-4 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: lbl.color }}
+                        />
+                        <span className="flex-1 text-sm font-medium text-[#1A1A1A]">{lbl.name}</span>
+                        <button
+                          onClick={() => { setEditingLabelId(lbl.id); setEditLabelName(lbl.name); setEditLabelColor(lbl.color) }}
+                          className="p-1.5 rounded hover:bg-gray-200 text-[#555555]"
+                          title="Rename"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteLabel(lbl.id)}
+                          disabled={deletingLabelId === lbl.id}
+                          className="p-1.5 rounded hover:bg-red-100 text-red-500"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Desktop save button (not shown on labels tab) */}
+        {activeTab !== 'labels' && (
+          <div className="mt-4 hidden sm:flex justify-end">
+            <Button onClick={handleSave} className="btn-primary gap-2" disabled={saving}>
+              <Save className="h-4 w-4" />
+              {saving ? 'Saving…' : 'Save Profile'}
+            </Button>
+          </div>
+        )}
+
+        {/* Mobile sticky save bar (not shown on labels tab) */}
+        {activeTab !== 'labels' && (
+          <div className="sm:hidden fixed bottom-16 inset-x-0 z-10 bg-white border-t border-gray-100 px-4 py-3">
+            <Button onClick={handleSave} className="btn-primary gap-2 w-full" disabled={saving}>
+              <Save className="h-4 w-4" />
+              {saving ? 'Saving…' : 'Save Profile'}
+            </Button>
+          </div>
+        )}
       </div>
     </AppLayout>
   )

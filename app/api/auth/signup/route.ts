@@ -47,6 +47,24 @@ export async function POST(request: Request) {
       }
     )
 
+    // Cross-role duplicate check: reject if email/phone already registered under any role
+    if (email?.trim()) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingEmail } = await (adminClient.from('users') as any)
+        .select('id').eq('email', email.trim()).maybeSingle() as { data: { id: string } | null }
+      if (existingEmail) {
+        return NextResponse.json({ error: 'An account with this email already exists. Please log in instead.' }, { status: 409 })
+      }
+    }
+    if (phone?.trim()) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingPhone } = await (adminClient.from('users') as any)
+        .select('id').eq('phone', phone.trim()).maybeSingle() as { data: { id: string } | null }
+      if (existingPhone) {
+        return NextResponse.json({ error: 'An account with this phone number already exists. Please log in instead.' }, { status: 409 })
+      }
+    }
+
     // shadchan accounts start as pending, all others as active
     const status = role === 'shadchan' ? 'pending' : 'active'
 
@@ -128,17 +146,37 @@ export async function POST(request: Request) {
       }
     }
 
+    // For parents: create a row in the parents table (child_id can be linked later by admin)
+    if (role === 'parent') {
+      const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Unknown'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: parentError } = await (adminClient.from('parents') as any).insert({
+        user_id: data.user.id,
+        full_name: fullName,
+        email: email?.trim() || null,
+        phone: phone?.trim() || null,
+        city: city?.trim() || null,
+      })
+      if (parentError && process.env.NODE_ENV === 'development') {
+        console.error('[signup] failed to create parents record:', parentError)
+      }
+    }
+
     // For singles: link to existing record (claim) or create a new one
     if (role === 'single') {
       if (claim_single_id) {
         // Link existing unclaimed single record to this new user
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: existing } = await (adminClient.from('singles') as any)
-          .select('user_id').eq('id', claim_single_id).maybeSingle() as { data: { user_id: string | null } | null }
+          .select('user_id, first_name, last_name').eq('id', claim_single_id).maybeSingle() as { data: { user_id: string | null; first_name: string; last_name: string } | null }
         if (existing && !existing.user_id) {
+          // Also update names if the existing record has them blank
+          const nameUpdate: Record<string, string> = { user_id: data.user.id }
+          if (!existing.first_name && firstName?.trim()) nameUpdate.first_name = firstName.trim()
+          if (!existing.last_name && lastName?.trim()) nameUpdate.last_name = lastName.trim()
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (adminClient.from('singles') as any)
-            .update({ user_id: data.user.id })
+            .update(nameUpdate)
             .eq('id', claim_single_id)
         } else {
           // Unclaimed record no longer available — create fresh

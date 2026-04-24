@@ -284,8 +284,11 @@ export default function SingleProfilePage() {
         setProfileStatus(single.status ?? 'available')
         setPhotoVisibility(single.photo_visibility ?? 'shadchanim_only')
 
-        const fn = single.first_name ?? ''
-        const ln = single.last_name ?? ''
+        // Fallback to user_metadata if singles record has empty names (e.g. right after signup)
+        const metaFirst = (user.user_metadata?.first_name as string | undefined) ?? ''
+        const metaLast = (user.user_metadata?.last_name as string | undefined) ?? ''
+        const fn = single.first_name || metaFirst
+        const ln = single.last_name || metaLast
         setDisplayName([fn, ln].filter(Boolean).join(' ') || 'Your Name')
         setDisplayLocation([single.city, single.state].filter(Boolean).join(', '))
 
@@ -881,7 +884,7 @@ export default function SingleProfilePage() {
 
       {/* Hidden file inputs */}
       <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={handlePhotoFileChange} className="hidden" aria-hidden />
-      <input ref={resumeInputRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={handleResumeChange} className="hidden" aria-hidden />
+      <input ref={resumeInputRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" capture="environment" onChange={handleResumeChange} className="hidden" aria-hidden />
 
       {/* Page header */}
       <div className="flex items-center gap-4 mb-5">

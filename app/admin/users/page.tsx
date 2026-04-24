@@ -21,6 +21,7 @@ import {
   BookOpen,
   MessageSquare,
   PackageOpen,
+  Trash2,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatCard } from '@/components/ui/stat-card'
@@ -29,6 +30,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
 import { AddUserModal } from '@/components/admin/add-user-modal'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import type { NavItem } from '@/components/ui/sidebar'
 import { createClient } from '@/lib/supabase/client'
 
@@ -66,6 +68,7 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1)
   const [addUserOpen, setAddUserOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const pageSize = 10
 
   useEffect(() => {
@@ -129,6 +132,24 @@ export default function AdminUsersPage() {
       }
     } catch (err) {
       console.error('[reject] fetch error', err)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleDeleteUser(userId: string) {
+    setActionLoading(userId)
+    setConfirmDeleteId(null)
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setUsers((prev) => prev.filter((u) => u.id !== userId))
+      } else {
+        const body = await res.json().catch(() => ({}))
+        console.error('[delete-user]', res.status, body)
+      }
+    } catch (err) {
+      console.error('[delete-user] fetch error', err)
     } finally {
       setActionLoading(null)
     }
@@ -287,6 +308,16 @@ export default function AdminUsersPage() {
                               Suspend
                             </Button>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            disabled={actionLoading === user.id}
+                            onClick={() => setConfirmDeleteId(user.id)}
+                            title="Delete account"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -316,6 +347,26 @@ export default function AdminUsersPage() {
         open={addUserOpen}
         onClose={() => setAddUserOpen(false)}
       />
+
+      <Dialog open={confirmDeleteId !== null} onOpenChange={(open) => { if (!open) setConfirmDeleteId(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Account</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-2">
+            <p className="text-sm text-[#555555]">
+              This will permanently delete the account and all associated data. This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="secondary" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => confirmDeleteId && handleDeleteUser(confirmDeleteId)}>
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Delete Permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   )
 }

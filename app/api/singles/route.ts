@@ -144,11 +144,11 @@ export async function GET(request: Request) {
       query = query.eq('created_by_shadchan_id', profileId)
     }
   } else {
-    // All available singles (shadchan 'all' tab)
+    // All singles (shadchan 'all' tab) — exclude only terminal/archived statuses
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     query = (adminClient.from('singles') as any)
       .select('id, first_name, last_name, gender, age, city, state, hashkafa, plans, height_inches, created_at, created_by_shadchan_id', { count: 'exact' })
-      .eq('status', 'available')
+      .not('status', 'in', '(engaged,married,inactive,archived)')
   }
 
   // Apply shared filters
