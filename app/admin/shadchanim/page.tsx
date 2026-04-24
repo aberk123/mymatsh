@@ -360,9 +360,8 @@ export default function AdminShadchanimPage() {
                     <td className="table-td">
                       <div className="flex items-center gap-2">
                         <Button
-                          variant="primary"
                           size="sm"
-                          className="gap-1"
+                          className="gap-1 bg-green-600 hover:bg-green-700 text-white border-green-600"
                           disabled={actionLoading}
                           onClick={() => setConfirmId(s.id)}
                         >
