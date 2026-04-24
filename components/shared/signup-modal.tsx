@@ -93,6 +93,13 @@ function ChipSelect({
   )
 }
 
+interface DuplicateMatch {
+  id: string
+  name: string
+  masked_email: string
+  masked_phone: string
+}
+
 export function SignUpModal({ open, onClose }: SignUpModalProps) {
   const [step, setStep] = useState<'role' | 'details'>('role')
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null)
@@ -101,6 +108,10 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  // Duplicate detection for single role
+  const [duplicateMatch, setDuplicateMatch] = useState<DuplicateMatch | null>(null)
+  const [claimSingleId, setClaimSingleId] = useState<string | null>(null)
+  const [duplicateChecking, setDuplicateChecking] = useState(false)
 
   function setShadchan(key: keyof ShadchanForm, val: string) {
     setShadchanForm((prev) => ({ ...prev, [key]: val }))
@@ -117,6 +128,26 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
   function setSimple(key: keyof SimpleForm, val: string) {
     setSimpleForm((prev) => ({ ...prev, [key]: val }))
     if (errors[key]) setErrors((prev) => { const e = { ...prev }; delete e[key]; return e })
+    // Clear duplicate state when name fields change
+    if (key === 'firstName' || key === 'lastName') {
+      setDuplicateMatch(null)
+      setClaimSingleId(null)
+    }
+  }
+
+  async function checkDuplicate(firstName: string, lastName: string) {
+    if (!firstName.trim() || !lastName.trim()) return
+    setDuplicateChecking(true)
+    try {
+      const res = await fetch('/api/singles/check-duplicate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ first_name: firstName.trim(), last_name: lastName.trim() }),
+      })
+      const d = await res.json()
+      setDuplicateMatch(d.match ?? null)
+    } catch { /* ignore */ }
+    finally { setDuplicateChecking(false) }
   }
 
   function validateShadchan(): Record<string, string> {
@@ -150,7 +181,7 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
     try {
       const body = selectedRole === 'shadchan'
         ? { role: 'shadchan', ...shadchanForm }
-        : { role: selectedRole, ...simpleForm }
+        : { role: selectedRole, ...simpleForm, claim_single_id: claimSingleId ?? undefined }
 
       await fetch('/api/auth/signup', {
         method: 'POST',
@@ -174,6 +205,8 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
       setSimpleForm(blankSimple)
       setErrors({})
       setSubmitted(false)
+      setDuplicateMatch(null)
+      setClaimSingleId(null)
     }, 300)
   }
 
@@ -423,11 +456,56 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
                   <Input
                     value={simpleForm.lastName}
                     onChange={(e) => setSimple('lastName', e.target.value)}
+                    onBlur={() => {
+                      if (selectedRole === 'single') {
+                        checkDuplicate(simpleForm.firstName, simpleForm.lastName)
+                      }
+                    }}
                     className={errors.lastName ? 'border-red-400' : ''}
                   />
                   {errors.lastName && <p className="text-xs text-red-500 mt-1">{errors.lastName}</p>}
                 </div>
               </div>
+
+              {/* FIX 1: Duplicate detection for single role */}
+              {selectedRole === 'single' && duplicateChecking && (
+                <p className="text-xs text-[#888888]">Checking for existing profile…</p>
+              )}
+              {selectedRole === 'single' && duplicateMatch && claimSingleId !== duplicateMatch.id && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                  <p className="text-sm font-semibold text-amber-800">
+                    We found an existing profile for {duplicateMatch.name}
+                  </p>
+                  <p className="text-xs text-amber-700">
+                    {duplicateMatch.masked_email && <span>Email: {duplicateMatch.masked_email}</span>}
+                    {duplicateMatch.masked_email && duplicateMatch.masked_phone && <span className="mx-1">·</span>}
+                    {duplicateMatch.masked_phone && <span>Phone: {duplicateMatch.masked_phone}</span>}
+                  </p>
+                  <p className="text-xs text-amber-700">Is this you? If yes, your new account will be linked to this profile.</p>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setClaimSingleId(duplicateMatch.id)}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                    >
+                      Yes, link my profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDuplicateMatch(null)}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors"
+                    >
+                      No, create new
+                    </button>
+                  </div>
+                </div>
+              )}
+              {selectedRole === 'single' && claimSingleId && duplicateMatch?.id === claimSingleId && (
+                <div className="rounded-xl border border-green-200 bg-green-50 p-3">
+                  <p className="text-sm font-semibold text-green-800">✓ Your new account will be linked to your existing profile.</p>
+                  <button type="button" onClick={() => { setClaimSingleId(null) }} className="text-xs text-green-700 hover:underline mt-1">Undo</button>
+                </div>
+              )}
 
               <div>
                 <Label className="field-label">Email</Label>

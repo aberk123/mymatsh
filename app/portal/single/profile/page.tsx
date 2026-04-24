@@ -23,6 +23,9 @@ import {
   ChevronUp,
   ChevronDown,
   Camera,
+  Search,
+  UserPlus,
+  Lock,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { Button } from '@/components/ui/button'
@@ -63,6 +66,20 @@ function hsToString(val: unknown): string {
 }
 function centerSquareCrop(w: number, h: number): Crop {
   return centerCrop(makeAspectCrop({ unit: '%', width: 90 }, 1, w, h), w, h)
+}
+
+// Height helpers
+function inchesToFt(total: number) {
+  return { feet: Math.floor(total / 12), inches: total % 12 }
+}
+function ftToInches(feet: number, inches: number) {
+  return feet * 12 + inches
+}
+function heightDisplay(totalStr: string): string {
+  const n = parseInt(totalStr, 10)
+  if (!n || n <= 0) return ''
+  const { feet, inches } = inchesToFt(n)
+  return `${feet}'${inches}"`
 }
 
 function AiBadge() {
@@ -159,12 +176,18 @@ export default function SingleProfilePage() {
 
   // ── Photos ────────────────────────────────────────────────────────────────────
   const [photos, setPhotos] = useState<SinglePhoto[]>([])
+  const [photoVisibility, setPhotoVisibility] = useState('shadchanim_only')
+  const [savingPhotoVisibility, setSavingPhotoVisibility] = useState(false)
   const [cropSrc, setCropSrc] = useState('')
   const [showCropModal, setShowCropModal] = useState(false)
   const [crop, setCrop] = useState<Crop>()
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>()
   const [photoUploading, setPhotoUploading] = useState(false)
   const [photoError, setPhotoError] = useState('')
+  const [confirmDeletePhotoId, setConfirmDeletePhotoId] = useState<string | null>(null)
+  const [deletingPhoto, setDeletingPhoto] = useState(false)
+  const [confirmDeleteResume, setConfirmDeleteResume] = useState(false)
+  const [deletingResume, setDeletingResume] = useState(false)
   const cropImgRef = useRef<HTMLImageElement>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
@@ -182,21 +205,25 @@ export default function SingleProfilePage() {
     dob: '', age: '', height_inches: '', phone: '', email: '',
     address: '', city: '', state: '', country: '',
   })
+  // Height feet/inches split state (derived from height_inches)
+  const [heightFeet, setHeightFeet] = useState('')
+  const [heightInchesRem, setHeightInchesRem] = useState('')
   const [savingPersonal, setSavingPersonal] = useState(false)
   const [personalError, setPersonalError] = useState('')
 
   // ── Education ─────────────────────────────────────────────────────────────────
   const [eduValues, setEduValues] = useState({
-    hashkafa: '', high_schools: '', eretz_yisroel: '',
-    current_yeshiva_seminary: '', post_high_school: '', current_education: '',
-    occupation: '', elementary_school: '', bachelors_degree: '', grad_degree: '',
-    certifications: '', currently_in_school: 'false', education_notes: '',
+    high_schools: '', eretz_yisroel: '',
+    current_yeshiva_seminary: '', current_education: '',
+    occupation: '', elementary_school: '', education_notes: '',
   })
   const [savingEdu, setSavingEdu] = useState(false)
   const [eduError, setEduError] = useState('')
 
   // ── About Me ──────────────────────────────────────────────────────────────────
-  const [aboutValues, setAboutValues] = useState({ about_bio: '', plans: '', personality_traits: '', hobbies: '' })
+  const [aboutValues, setAboutValues] = useState({
+    about_bio: '', plans: '', hobbies: '', hashkafa: '', languages: '',
+  })
   const [savingAbout, setSavingAbout] = useState(false)
   const [aboutError, setAboutError] = useState('')
   const [selfLabels, setSelfLabels] = useState<string[]>([])
@@ -214,9 +241,14 @@ export default function SingleProfilePage() {
 
   // ── Family ────────────────────────────────────────────────────────────────────
   const [familyValues, setFamilyValues] = useState({
-    family_background: '', fathers_name: '', fathers_occupation: '',
-    mothers_name: '', mothers_maiden_name: '', mothers_occupation: '',
+    family_background: '',
+    fathers_name: '', father_hebrew_name: '', fathers_occupation: '',
+    father_phone: '', father_email: '',
+    mothers_name: '', mother_hebrew_name: '', mothers_maiden_name: '', mothers_occupation: '',
+    mother_phone: '', mother_email: '',
     num_siblings: '', family_notes: '',
+    family_shul_name: '', family_shul_address: '',
+    family_rav_name: '', family_rav_phone: '', family_rav_shul: '',
   })
   const [savingFamily, setSavingFamily] = useState(false)
   const [familyError, setFamilyError] = useState('')
@@ -227,9 +259,15 @@ export default function SingleProfilePage() {
   const [savingRefs, setSavingRefs] = useState(false)
   const [refsError, setRefsError] = useState('')
 
-  // ── Familiar Shadchanim ───────────────────────────────────────────────────────
-  const [familiarShadchanim, setFamiliarShadchanim] = useState<Array<{ full_name: string; city: string; phone: string | null }>>([])
+  // ── Shadchanim Tab ────────────────────────────────────────────────────────────
+  interface FamiliarShadchan { shadchan_id: string; full_name: string; city: string; phone: string | null; linked_at: string }
+  const [familiarShadchanim, setFamiliarShadchanim] = useState<FamiliarShadchan[]>([])
   const [familiarLoading, setFamiliarLoading] = useState(false)
+  const [shadchanSearch, setShadchanSearch] = useState('')
+  const [shadchanSearchResults, setShadchanSearchResults] = useState<Array<{ id: string; full_name: string; location: string }>>([])
+  const [shadchanSearchLoading, setShadchanSearchLoading] = useState(false)
+  const [addingShadchan, setAddingShadchan] = useState<string | null>(null)
+  const [removingShadchan, setRemovingShadchan] = useState<string | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -244,11 +282,19 @@ export default function SingleProfilePage() {
         setSingleId(single.id)
         setResumeUrl(single.resume_url ?? null)
         setProfileStatus(single.status ?? 'available')
+        setPhotoVisibility(single.photo_visibility ?? 'shadchanim_only')
 
         const fn = single.first_name ?? ''
         const ln = single.last_name ?? ''
         setDisplayName([fn, ln].filter(Boolean).join(' ') || 'Your Name')
         setDisplayLocation([single.city, single.state].filter(Boolean).join(', '))
+
+        const totalInches = single.height_inches != null ? Number(single.height_inches) : 0
+        if (totalInches > 0) {
+          const { feet, inches } = inchesToFt(totalInches)
+          setHeightFeet(String(feet))
+          setHeightInchesRem(String(inches))
+        }
 
         setPersonalValues({
           first_name: fn, last_name: ln,
@@ -263,7 +309,6 @@ export default function SingleProfilePage() {
 
         setEduValues(v => ({
           ...v,
-          hashkafa: single.hashkafa ?? '',
           high_schools: hsToString(single.high_schools),
           eretz_yisroel: single.eretz_yisroel ?? '',
           current_yeshiva_seminary: single.current_yeshiva_seminary ?? '',
@@ -274,8 +319,9 @@ export default function SingleProfilePage() {
         setAboutValues({
           about_bio: single.about_bio ?? '',
           plans: single.plans ?? '',
-          personality_traits: single.personality_traits ?? '',
           hobbies: single.hobbies ?? '',
+          hashkafa: single.hashkafa ?? '',
+          languages: single.languages ?? '',
         })
 
         setLookingForValues(v => ({ ...v, looking_for: single.looking_for ?? '' }))
@@ -303,11 +349,6 @@ export default function SingleProfilePage() {
           setEduValues(v => ({
             ...v,
             elementary_school: ed.elementary_school ?? '',
-            post_high_school: ed.post_high_school ?? '',
-            bachelors_degree: ed.bachelors_degree ?? '',
-            grad_degree: ed.grad_degree ?? '',
-            certifications: ed.certifications ?? '',
-            currently_in_school: ed.currently_in_school ? 'true' : 'false',
             education_notes: ed.notes ?? '',
           }))
         }
@@ -317,12 +358,23 @@ export default function SingleProfilePage() {
           setFamilyValues(v => ({
             ...v,
             fathers_name: fam.fathers_name ?? '',
+            father_hebrew_name: fam.father_hebrew_name ?? '',
             fathers_occupation: fam.fathers_occupation ?? '',
+            father_phone: fam.father_phone ?? '',
+            father_email: fam.father_email ?? '',
             mothers_name: fam.mothers_name ?? '',
+            mother_hebrew_name: fam.mother_hebrew_name ?? '',
             mothers_maiden_name: fam.mothers_maiden_name ?? '',
             mothers_occupation: fam.mothers_occupation ?? '',
+            mother_phone: fam.mother_phone ?? '',
+            mother_email: fam.mother_email ?? '',
             num_siblings: fam.num_siblings != null ? String(fam.num_siblings) : '',
             family_notes: fam.family_notes ?? '',
+            family_shul_name: fam.family_shul_name ?? '',
+            family_shul_address: fam.family_shul_address ?? '',
+            family_rav_name: fam.family_rav_name ?? '',
+            family_rav_phone: fam.family_rav_phone ?? '',
+            family_rav_shul: fam.family_rav_shul ?? '',
           }))
         }
 
@@ -403,11 +455,10 @@ export default function SingleProfilePage() {
   function resolveConflict(key: string, choice: 'ai' | 'original') {
     if (choice === 'ai') {
       const val = aiParsed[key].aiValue
-      // Route value to correct state
       if (key in personalValues) setPersonalValues(prev => ({ ...prev, [key]: val }))
+      else if (key === 'hashkafa' || key in aboutValues) setAboutValues(prev => ({ ...prev, [key]: val }))
       else if (key in eduValues) setEduValues(prev => ({ ...prev, [key]: val }))
-      else if (key in aboutValues) setAboutValues(prev => ({ ...prev, [key as keyof typeof aboutValues]: val }))
-      else if (key in familyValues) setFamilyValues(prev => ({ ...prev, [key]: val }))
+      else if (key === 'family_background') setFamilyValues(prev => ({ ...prev, family_background: val }))
       setAiParsed(prev => ({ ...prev, [key]: { ...prev[key], originalValue: '' } }))
     } else {
       setAiParsed(prev => { const n = { ...prev }; delete n[key]; return n })
@@ -460,8 +511,23 @@ export default function SingleProfilePage() {
 
   async function handleDeletePhoto(photoId: string) {
     if (!singleId) return
+    setDeletingPhoto(true)
     const res = await fetch(`/api/singles/${singleId}/photos/${photoId}`, { method: 'DELETE' })
     if (res.ok) setPhotos(prev => prev.filter(p => p.id !== photoId))
+    setDeletingPhoto(false)
+    setConfirmDeletePhotoId(null)
+  }
+
+  async function handleDeleteResume() {
+    if (!singleId) return
+    setDeletingResume(true)
+    await fetch(`/api/singles/${singleId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume_url: null }),
+    })
+    setResumeUrl(null)
+    setDeletingResume(false)
+    setConfirmDeleteResume(false)
   }
 
   async function handleMovePhoto(photoId: string, direction: 'up' | 'down') {
@@ -498,6 +564,7 @@ export default function SingleProfilePage() {
       const parsed = json.fields as Record<string, unknown>
       if (json.resumeUrl) setResumeUrl(json.resumeUrl)
 
+      // FIX 12: family info goes to family_background only — individual fields never auto-populated
       const FIELD_MAP: Record<string, string> = {
         first_name: 'first_name', last_name: 'last_name', full_hebrew_name: 'full_hebrew_name',
         gender: 'gender', dob: 'dob', age: 'age', city: 'city', state: 'state',
@@ -507,7 +574,7 @@ export default function SingleProfilePage() {
         phone: 'phone', email: 'email', occupation: 'occupation', current_education: 'current_education',
       }
 
-      const allValues = { ...personalValues, ...eduValues, ...aboutValues, looking_for: lookingForValues.looking_for, ...familyValues }
+      const allValues = { ...personalValues, ...eduValues, ...aboutValues, looking_for: lookingForValues.looking_for, family_background: familyValues.family_background }
       const newAiParsed: Record<string, AIParsedField> = {}
 
       for (const [claudeKey, editKey] of Object.entries(FIELD_MAP)) {
@@ -517,10 +584,9 @@ export default function SingleProfilePage() {
         const currentVal = (allValues as Record<string, string>)[editKey] ?? ''
         if (!currentVal) {
           newAiParsed[editKey] = { aiValue, originalValue: '' }
-          // Apply immediately
           if (editKey in personalValues) setPersonalValues(prev => ({ ...prev, [editKey]: aiValue }))
+          else if (editKey === 'hashkafa' || editKey === 'about_bio' || editKey === 'plans') setAboutValues(prev => ({ ...prev, [editKey === 'about_bio' ? 'about_bio' : editKey]: aiValue }))
           else if (editKey in eduValues) setEduValues(prev => ({ ...prev, [editKey]: aiValue }))
-          else if (editKey === 'about_bio' || editKey === 'plans') setAboutValues(prev => ({ ...prev, [editKey]: aiValue }))
           else if (editKey === 'looking_for') setLookingForValues(prev => ({ ...prev, looking_for: aiValue }))
           else if (editKey === 'family_background') setFamilyValues(prev => ({ ...prev, family_background: aiValue }))
         } else if (currentVal !== aiValue) {
@@ -529,6 +595,7 @@ export default function SingleProfilePage() {
       }
 
       setAiParsed(newAiParsed)
+      // FIX 13: raw AI data shown as info only — never auto-populates references
       const raw: AIRawData = {}
       if (parsed.siblings) raw.siblings = String(parsed.siblings)
       if (parsed.references) raw.references = String(parsed.references)
@@ -547,9 +614,16 @@ export default function SingleProfilePage() {
   async function savePersonal() {
     if (!singleId) return
     setSavingPersonal(true); setPersonalError('')
+    // Combine feet/inches back to total inches
+    const totalInches = heightFeet || heightInchesRem
+      ? ftToInches(parseInt(heightFeet || '0', 10), parseInt(heightInchesRem || '0', 10))
+      : personalValues.height_inches ? parseInt(personalValues.height_inches, 10) : null
+    const updatedHeight = totalInches && totalInches > 0 ? String(totalInches) : ''
+    setPersonalValues(prev => ({ ...prev, height_inches: updatedHeight || prev.height_inches }))
+
     const payload: Record<string, unknown> = {
       ...personalValues,
-      height_inches: personalValues.height_inches ? parseInt(personalValues.height_inches, 10) : null,
+      height_inches: totalInches && totalInches > 0 ? totalInches : null,
       age: personalValues.age ? parseInt(personalValues.age, 10) : null,
     }
     const res = await fetch(`/api/singles/${singleId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -568,7 +642,6 @@ export default function SingleProfilePage() {
       fetch(`/api/singles/${singleId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          hashkafa: eduValues.hashkafa || null,
           high_schools: eduValues.high_schools.trim() ? eduValues.high_schools.split(',').map(s => s.trim()).filter(Boolean) : null,
           eretz_yisroel: eduValues.eretz_yisroel || null,
           current_yeshiva_seminary: eduValues.current_yeshiva_seminary || null,
@@ -580,11 +653,6 @@ export default function SingleProfilePage() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           elementary_school: eduValues.elementary_school || null,
-          post_high_school: eduValues.post_high_school || null,
-          bachelors_degree: eduValues.bachelors_degree || null,
-          grad_degree: eduValues.grad_degree || null,
-          certifications: eduValues.certifications || null,
-          currently_in_school: eduValues.currently_in_school === 'true',
           notes: eduValues.education_notes || null,
         }),
       }),
@@ -601,8 +669,9 @@ export default function SingleProfilePage() {
       body: JSON.stringify({
         about_bio: aboutValues.about_bio || null,
         plans: aboutValues.plans || null,
-        personality_traits: aboutValues.personality_traits || null,
         hobbies: aboutValues.hobbies || null,
+        hashkafa: aboutValues.hashkafa || null,
+        languages: aboutValues.languages || null,
         self_labels: selfLabels,
       }),
     })
@@ -650,12 +719,23 @@ export default function SingleProfilePage() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fathers_name: familyValues.fathers_name || null,
+          father_hebrew_name: familyValues.father_hebrew_name || null,
           fathers_occupation: familyValues.fathers_occupation || null,
+          father_phone: familyValues.father_phone || null,
+          father_email: familyValues.father_email || null,
           mothers_name: familyValues.mothers_name || null,
+          mother_hebrew_name: familyValues.mother_hebrew_name || null,
           mothers_maiden_name: familyValues.mothers_maiden_name || null,
           mothers_occupation: familyValues.mothers_occupation || null,
+          mother_phone: familyValues.mother_phone || null,
+          mother_email: familyValues.mother_email || null,
           num_siblings: familyValues.num_siblings ? parseInt(familyValues.num_siblings, 10) : null,
           family_notes: familyValues.family_notes || null,
+          family_shul_name: familyValues.family_shul_name || null,
+          family_shul_address: familyValues.family_shul_address || null,
+          family_rav_name: familyValues.family_rav_name || null,
+          family_rav_phone: familyValues.family_rav_phone || null,
+          family_rav_shul: familyValues.family_rav_shul || null,
         }),
       }),
     ])
@@ -673,6 +753,59 @@ export default function SingleProfilePage() {
     })
     if (!res.ok) { const j = await res.json(); setRefsError(j.error ?? 'Save failed.') }
     setSavingRefs(false)
+  }
+
+  async function savePhotoVisibility(val: string) {
+    if (!singleId) return
+    setSavingPhotoVisibility(true)
+    await fetch(`/api/singles/${singleId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo_visibility: val }),
+    })
+    setSavingPhotoVisibility(false)
+  }
+
+  // ── Shadchan search/add ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (shadchanSearch.trim().length < 2) { setShadchanSearchResults([]); return }
+    const t = setTimeout(async () => {
+      setShadchanSearchLoading(true)
+      try {
+        const res = await fetch(`/api/singles/search-shadchanim?q=${encodeURIComponent(shadchanSearch.trim())}`)
+        const d = await res.json()
+        setShadchanSearchResults(d.shadchanim ?? [])
+      } catch { /* ignore */ }
+      finally { setShadchanSearchLoading(false) }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [shadchanSearch])
+
+  async function handleAddShadchan(shadchanId: string) {
+    if (!singleId) return
+    setAddingShadchan(shadchanId)
+    const res = await fetch(`/api/singles/${singleId}/familiar-shadchanim`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shadchan_profile_id: shadchanId }),
+    })
+    if (res.ok) {
+      const added = shadchanSearchResults.find(s => s.id === shadchanId)
+      if (added && !familiarShadchanim.find(s => s.shadchan_id === shadchanId)) {
+        setFamiliarShadchanim(prev => [...prev, {
+          shadchan_id: shadchanId, full_name: added.full_name, city: added.location, phone: null, linked_at: new Date().toISOString(),
+        }])
+      }
+      setShadchanSearch('')
+      setShadchanSearchResults([])
+    }
+    setAddingShadchan(null)
+  }
+
+  async function handleRemoveShadchan(shadchanId: string) {
+    if (!singleId) return
+    setRemovingShadchan(shadchanId)
+    await fetch(`/api/singles/${singleId}/familiar-shadchanim?shadchan_profile_id=${shadchanId}`, { method: 'DELETE' })
+    setFamiliarShadchanim(prev => prev.filter(s => s.shadchan_id !== shadchanId))
+    setRemovingShadchan(null)
   }
 
   // ── Labels ────────────────────────────────────────────────────────────────────
@@ -712,6 +845,36 @@ export default function SingleProfilePage() {
           <DialogFooter className="mt-2">
             <Button variant="secondary" onClick={() => setShowCropModal(false)}>Cancel</Button>
             <Button variant="primary" onClick={handleCropConfirm}><Check className="h-3.5 w-3.5 mr-1.5" />Use This Photo</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm delete photo */}
+      <Dialog open={!!confirmDeletePhotoId} onOpenChange={open => { if (!open) setConfirmDeletePhotoId(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete Photo?</DialogTitle></DialogHeader>
+          <p className="text-sm text-[#555555] mt-1">This photo will be permanently deleted and cannot be recovered.</p>
+          <DialogFooter className="mt-4">
+            <Button variant="secondary" onClick={() => setConfirmDeletePhotoId(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => confirmDeletePhotoId && handleDeletePhoto(confirmDeletePhotoId)} disabled={deletingPhoto} className="gap-1.5">
+              {deletingPhoto ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm delete resume */}
+      <Dialog open={confirmDeleteResume} onOpenChange={open => { if (!open) setConfirmDeleteResume(false) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete Resume?</DialogTitle></DialogHeader>
+          <p className="text-sm text-[#555555] mt-1">Your uploaded resume will be removed. Your profile information will remain.</p>
+          <DialogFooter className="mt-4">
+            <Button variant="secondary" onClick={() => setConfirmDeleteResume(false)}>Cancel</Button>
+            <Button variant="danger" onClick={handleDeleteResume} disabled={deletingResume} className="gap-1.5">
+              {deletingResume ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -775,18 +938,18 @@ export default function SingleProfilePage() {
         </div>
       )}
 
-      {/* Tabs */}
-      <Tabs.Root defaultValue="photos" className="w-full">
+      {/* Tabs — FIX 3: new order */}
+      <Tabs.Root defaultValue="personal" className="w-full">
         <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
           <Tabs.List className="flex border-b border-gray-200 mb-6 w-max min-w-full">
             {[
-              { value: 'photos', label: 'Photos' },
               { value: 'personal', label: 'Personal Info' },
-              { value: 'education', label: 'Education' },
               { value: 'about', label: 'About Me' },
+              { value: 'education', label: 'Education & Career' },
               { value: 'looking', label: 'Looking For' },
               { value: 'family', label: 'Family' },
               { value: 'references', label: 'References' },
+              { value: 'photos', label: 'Photos & Resume' },
               { value: 'shadchanim', label: 'Shadchanim' },
             ].map(tab => (
               <Tabs.Trigger
@@ -800,120 +963,67 @@ export default function SingleProfilePage() {
           </Tabs.List>
         </div>
 
-        {/* ── Photos ──────────────────────────────────────────────────────── */}
-        <Tabs.Content value="photos">
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-semibold text-[#1A1A1A]">Profile Photos</h3>
-                <p className="text-xs text-[#888888] mt-0.5">Up to 5 photos · First photo is your main profile photo</p>
-              </div>
-              {photos.length < 5 && (
-                <Button variant="outline-maroon" size="sm" onClick={handlePhotoPickerClick} disabled={photoUploading} className="gap-1.5">
-                  {photoUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                  Add Photo
-                </Button>
-              )}
-            </div>
-
-            {photoError && <p className="mb-3 text-sm text-red-600">{photoError}</p>}
-
-            {photos.length === 0 ? (
-              <button onClick={handlePhotoPickerClick} disabled={photoUploading}
-                className="w-full flex flex-col items-center justify-center gap-3 border-2 border-dashed border-gray-200 hover:border-brand-maroon rounded-xl p-10 text-center transition-colors group">
-                {photoUploading
-                  ? <Loader2 className="h-8 w-8 text-brand-maroon animate-spin" />
-                  : <Camera className="h-8 w-8 text-gray-300 group-hover:text-brand-maroon transition-colors" />}
-                <span className="text-sm font-medium text-[#555555] group-hover:text-brand-maroon transition-colors">Upload your first photo</span>
-                <span className="text-xs text-[#AAAAAA]">JPG, PNG or WebP · Max 5 MB</span>
-              </button>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {photos.map((photo, idx) => (
-                  <div key={photo.id} className="relative group aspect-square rounded-xl overflow-hidden border border-gray-200">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photo.public_url} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
-                    {idx === 0 && (
-                      <div className="absolute top-1.5 start-1.5 bg-brand-maroon text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Main</div>
-                    )}
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                      <div className="flex gap-1">
-                        <button onClick={() => handleMovePhoto(photo.id, 'up')} disabled={idx === 0}
-                          className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg disabled:opacity-30 transition-colors" aria-label="Move left">
-                          <ChevronUp className="h-3.5 w-3.5 text-white" />
-                        </button>
-                        <button onClick={() => handleMovePhoto(photo.id, 'down')} disabled={idx === photos.length - 1}
-                          className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg disabled:opacity-30 transition-colors" aria-label="Move right">
-                          <ChevronDown className="h-3.5 w-3.5 text-white" />
-                        </button>
-                      </div>
-                      <button onClick={() => handleDeletePhoto(photo.id)}
-                        className="p-1.5 bg-red-500/80 hover:bg-red-600 rounded-lg transition-colors" aria-label="Delete">
-                        <Trash2 className="h-3.5 w-3.5 text-white" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {photos.length < 5 && (
-                  <button onClick={handlePhotoPickerClick} disabled={photoUploading}
-                    className="aspect-square rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-maroon flex flex-col items-center justify-center gap-1.5 transition-colors group">
-                    {photoUploading
-                      ? <Loader2 className="h-6 w-6 text-brand-maroon animate-spin" />
-                      : <Plus className="h-6 w-6 text-gray-300 group-hover:text-brand-maroon transition-colors" />}
-                    <span className="text-xs text-[#888888] group-hover:text-brand-maroon">Add</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Resume upload */}
-            <div className="mt-6 pt-6 border-t border-gray-100">
-              <h3 className="font-semibold text-[#1A1A1A] mb-1">Shidduch Resume</h3>
-              <p className="text-xs text-[#888888] mb-3">Upload your shidduch resume — we&apos;ll fill in your profile automatically.</p>
-              {resumeParsing ? (
-                <div className="flex items-center gap-3 py-6 justify-center">
-                  <Loader2 className="h-5 w-5 text-brand-maroon animate-spin" />
-                  <p className="text-sm text-[#555555]">Reading your resume…</p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <button onClick={handleResumePickerClick}
-                    className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 hover:border-brand-maroon rounded-xl p-5 text-center transition-colors group">
-                    <FileText className="h-7 w-7 text-gray-300 group-hover:text-brand-maroon transition-colors" />
-                    <span className="text-sm font-medium text-[#555555] group-hover:text-brand-maroon transition-colors">
-                      {resumeUrl ? 'Upload a new resume' : 'Upload resume'}
-                    </span>
-                    <span className="text-xs text-[#AAAAAA]">PDF, JPG or PNG · Max 10 MB</span>
-                  </button>
-                  {resumeUrl && (
-                    <a href={resumeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-brand-maroon hover:underline">
-                      <FileText className="h-3.5 w-3.5" /> View uploaded resume
-                    </a>
-                  )}
-                </div>
-              )}
-              {resumeError && <p className="mt-2 text-sm text-red-600">{resumeError}</p>}
-            </div>
-          </div>
-        </Tabs.Content>
-
         {/* ── Personal Info ────────────────────────────────────────────────── */}
         <Tabs.Content value="personal">
           <div className="card">
             <h3 className="font-semibold text-[#1A1A1A] mb-2">Personal Information</h3>
-            {(['first_name', 'last_name', 'full_hebrew_name', 'gender', 'dob', 'age', 'height_inches', 'phone', 'email', 'address', 'city', 'state', 'country'] as const).map(key => {
+            {(['first_name', 'last_name', 'full_hebrew_name', 'gender', 'dob', 'age'] as const).map(key => {
               const labels: Record<string, string> = {
                 first_name: 'First Name', last_name: 'Last Name', full_hebrew_name: 'Hebrew Name',
-                gender: 'Gender', dob: 'Date of Birth', age: 'Age', height_inches: 'Height (total inches)',
-                phone: 'Phone', email: 'Email', address: 'Address', city: 'City', state: 'State', country: 'Country',
+                gender: 'Gender', dob: 'Date of Birth', age: 'Age',
               }
               return (
                 <FieldRow key={key} label={labels[key]} value={personalValues[key]}
                   editable editMode
-                  inputType={key === 'dob' ? 'date' : (key === 'age' || key === 'height_inches') ? 'number' : 'input'}
+                  inputType={key === 'dob' ? 'date' : key === 'age' ? 'number' : 'input'}
                   fieldKey={key} editValues={personalValues}
                   onChange={(k, v) => setPersonalValues(prev => ({ ...prev, [k]: v }))}
-                  hint={key === 'height_inches' ? "Total inches, e.g. 70 for 5'10\"" : undefined}
+                  aiSuggested={isAiField(key) && !isConflict(key)} />
+              )
+            })}
+
+            {/* FIX 7: Height in feet/inches */}
+            <div className="flex flex-col gap-1 py-3 border-b border-gray-100">
+              <span className="field-label">
+                Height
+                {personalValues.height_inches && (
+                  <span className="ml-2 text-xs font-normal text-[#888888]">= {heightDisplay(personalValues.height_inches)}</span>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <Input type="number" min="4" max="7" placeholder="ft"
+                    value={heightFeet}
+                    onChange={e => {
+                      setHeightFeet(e.target.value)
+                      const total = ftToInches(parseInt(e.target.value || '0', 10), parseInt(heightInchesRem || '0', 10))
+                      if (total > 0) setPersonalValues(prev => ({ ...prev, height_inches: String(total) }))
+                    }}
+                    className="input-base w-16 text-center" />
+                  <span className="text-sm text-[#555555]">ft</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Input type="number" min="0" max="11" placeholder="in"
+                    value={heightInchesRem}
+                    onChange={e => {
+                      setHeightInchesRem(e.target.value)
+                      const total = ftToInches(parseInt(heightFeet || '0', 10), parseInt(e.target.value || '0', 10))
+                      if (total > 0) setPersonalValues(prev => ({ ...prev, height_inches: String(total) }))
+                    }}
+                    className="input-base w-16 text-center" />
+                  <span className="text-sm text-[#555555]">in</span>
+                </div>
+              </div>
+            </div>
+
+            {(['phone', 'email', 'address', 'city', 'state', 'country'] as const).map(key => {
+              const labels: Record<string, string> = {
+                phone: 'Phone', email: 'Email', address: 'Address', city: 'City', state: 'State', country: 'Country',
+              }
+              return (
+                <FieldRow key={key} label={labels[key]} value={personalValues[key]}
+                  editable editMode fieldKey={key} editValues={personalValues}
+                  onChange={(k, v) => setPersonalValues(prev => ({ ...prev, [k]: v }))}
                   aiSuggested={isAiField(key) && !isConflict(key)} />
               )
             })}
@@ -921,44 +1031,8 @@ export default function SingleProfilePage() {
           </div>
         </Tabs.Content>
 
-        {/* ── Education ────────────────────────────────────────────────────── */}
-        <Tabs.Content value="education">
-          <div className="card">
-            <h3 className="font-semibold text-[#1A1A1A] mb-2">Education & Career</h3>
-            {([
-              { key: 'hashkafa', label: 'Hashkafa' },
-              { key: 'elementary_school', label: 'Elementary School' },
-              { key: 'high_schools', label: 'High School(s)', hint: 'Comma-separated if multiple' },
-              { key: 'eretz_yisroel', label: 'Eretz Yisroel' },
-              { key: 'current_yeshiva_seminary', label: 'Current Yeshiva / Seminary' },
-              { key: 'post_high_school', label: 'Post High School Program' },
-              { key: 'current_education', label: 'Current Education / Program' },
-              { key: 'bachelors_degree', label: "Bachelor's Degree" },
-              { key: 'grad_degree', label: 'Graduate Degree' },
-              { key: 'certifications', label: 'Certifications / Licenses' },
-              { key: 'occupation', label: 'Occupation' },
-            ] as const).map(({ key, label, hint }: { key: string; label: string; hint?: string }) => (
-              <FieldRow key={key} label={label} value={eduValues[key as keyof typeof eduValues]}
-                editable editMode fieldKey={key} editValues={eduValues}
-                onChange={(k, v) => setEduValues(prev => ({ ...prev, [k]: v }))}
-                hint={hint} aiSuggested={isAiField(key) && !isConflict(key)} />
-            ))}
-            <div className="flex flex-col gap-1 py-3 border-b border-gray-100">
-              <span className="field-label">Currently in School</span>
-              <select className="input-base w-auto" value={eduValues.currently_in_school}
-                onChange={e => setEduValues(prev => ({ ...prev, currently_in_school: e.target.value }))}>
-                <option value="false">No</option>
-                <option value="true">Yes</option>
-              </select>
-            </div>
-            <FieldRow label="Education Notes" value={eduValues.education_notes}
-              editable editMode inputType="textarea" fieldKey="education_notes" editValues={eduValues}
-              onChange={(k, v) => setEduValues(prev => ({ ...prev, [k]: v }))} />
-            <SectionSaveBar saving={savingEdu} error={eduError} onSave={saveEducation} />
-          </div>
-        </Tabs.Content>
-
         {/* ── About Me ─────────────────────────────────────────────────────── */}
+        {/* FIX 8+10: Hashkafa moved here; Languages Spoken added */}
         <Tabs.Content value="about">
           <div className="card mb-5">
             <h3 className="font-semibold text-[#1A1A1A] mb-2">About Me</h3>
@@ -966,13 +1040,18 @@ export default function SingleProfilePage() {
               fieldKey="about_bio" editValues={aboutValues}
               onChange={(k, v) => setAboutValues(prev => ({ ...prev, [k]: v }))}
               aiSuggested={isAiField('about_bio') && !isConflict('about_bio')} />
+            <FieldRow label="Hashkafa" value={aboutValues.hashkafa} editable editMode
+              fieldKey="hashkafa" editValues={aboutValues}
+              onChange={(k, v) => setAboutValues(prev => ({ ...prev, [k]: v }))}
+              aiSuggested={isAiField('hashkafa') && !isConflict('hashkafa')} />
             <FieldRow label="Plans" value={aboutValues.plans} editable editMode inputType="textarea"
               fieldKey="plans" editValues={aboutValues}
               onChange={(k, v) => setAboutValues(prev => ({ ...prev, [k]: v }))}
               aiSuggested={isAiField('plans') && !isConflict('plans')} />
-            <FieldRow label="Personality Traits" value={aboutValues.personality_traits} editable editMode
-              fieldKey="personality_traits" editValues={aboutValues}
-              onChange={(k, v) => setAboutValues(prev => ({ ...prev, [k]: v }))} />
+            <FieldRow label="Languages Spoken" value={aboutValues.languages} editable editMode
+              fieldKey="languages" editValues={aboutValues}
+              onChange={(k, v) => setAboutValues(prev => ({ ...prev, [k]: v }))}
+              hint="e.g. English, Hebrew, Yiddish" />
             <FieldRow label="Hobbies & Interests" value={aboutValues.hobbies} editable editMode
               fieldKey="hobbies" editValues={aboutValues}
               onChange={(k, v) => setAboutValues(prev => ({ ...prev, [k]: v }))} />
@@ -1031,6 +1110,30 @@ export default function SingleProfilePage() {
           </div>
         </Tabs.Content>
 
+        {/* ── Education & Career ───────────────────────────────────────────── */}
+        {/* FIX 9: simplified fields */}
+        <Tabs.Content value="education">
+          <div className="card">
+            <h3 className="font-semibold text-[#1A1A1A] mb-2">Education & Career</h3>
+            {([
+              { key: 'elementary_school', label: 'Elementary School' },
+              { key: 'high_schools', label: 'High School(s)', hint: 'Comma-separated if multiple' },
+              { key: 'current_yeshiva_seminary', label: 'Beis Medrash / Seminary' },
+              { key: 'current_education', label: 'Current Education / Program' },
+              { key: 'occupation', label: 'Occupation / Career' },
+            ] as const).map(({ key, label, hint }: { key: string; label: string; hint?: string }) => (
+              <FieldRow key={key} label={label} value={eduValues[key as keyof typeof eduValues]}
+                editable editMode fieldKey={key} editValues={eduValues}
+                onChange={(k, v) => setEduValues(prev => ({ ...prev, [k]: v }))}
+                hint={hint} aiSuggested={isAiField(key) && !isConflict(key)} />
+            ))}
+            <FieldRow label="Notes" value={eduValues.education_notes} editable editMode inputType="textarea"
+              fieldKey="education_notes" editValues={eduValues}
+              onChange={(k, v) => setEduValues(prev => ({ ...prev, [k]: v }))} />
+            <SectionSaveBar saving={savingEdu} error={eduError} onSave={saveEducation} />
+          </div>
+        </Tabs.Content>
+
         {/* ── Looking For ──────────────────────────────────────────────────── */}
         <Tabs.Content value="looking">
           <div className="card">
@@ -1074,6 +1177,7 @@ export default function SingleProfilePage() {
         </Tabs.Content>
 
         {/* ── Family ───────────────────────────────────────────────────────── */}
+        {/* FIX 11: new fields; FIX 13: Family Rav section here */}
         <Tabs.Content value="family">
           <div className="card">
             <h3 className="font-semibold text-[#1A1A1A] mb-2">Family</h3>
@@ -1081,22 +1185,63 @@ export default function SingleProfilePage() {
               fieldKey="family_background" editValues={familyValues}
               onChange={(k, v) => setFamilyValues(prev => ({ ...prev, [k]: v }))}
               aiSuggested={isAiField('family_background') && !isConflict('family_background')} />
+
+            <p className="text-xs font-semibold text-[#888888] uppercase tracking-wide mt-4 mb-1">Father</p>
             {([
               { key: 'fathers_name', label: "Father's Name" },
+              { key: 'father_hebrew_name', label: "Father's Hebrew Name" },
               { key: 'fathers_occupation', label: "Father's Occupation" },
-              { key: 'mothers_name', label: "Mother's Name" },
-              { key: 'mothers_maiden_name', label: "Mother's Maiden Name" },
-              { key: 'mothers_occupation', label: "Mother's Occupation" },
-              { key: 'num_siblings', label: 'Number of Siblings', type: 'number' },
-            ] as Array<{ key: string; label: string; type?: string }>).map(({ key, label, type }) => (
+              { key: 'father_phone', label: "Father's Phone" },
+              { key: 'father_email', label: "Father's Email" },
+            ] as const).map(({ key, label }) => (
               <FieldRow key={key} label={label} value={familyValues[key as keyof typeof familyValues]}
-                editable editMode inputType={type === 'number' ? 'number' : 'input'}
-                fieldKey={key} editValues={familyValues}
+                editable editMode fieldKey={key} editValues={familyValues}
                 onChange={(k, v) => setFamilyValues(prev => ({ ...prev, [k]: v }))} />
             ))}
+
+            <p className="text-xs font-semibold text-[#888888] uppercase tracking-wide mt-4 mb-1">Mother</p>
+            {([
+              { key: 'mothers_name', label: "Mother's Name" },
+              { key: 'mother_hebrew_name', label: "Mother's Hebrew Name" },
+              { key: 'mothers_maiden_name', label: "Mother's Maiden Name" },
+              { key: 'mothers_occupation', label: "Mother's Occupation" },
+              { key: 'mother_phone', label: "Mother's Phone" },
+              { key: 'mother_email', label: "Mother's Email" },
+            ] as const).map(({ key, label }) => (
+              <FieldRow key={key} label={label} value={familyValues[key as keyof typeof familyValues]}
+                editable editMode fieldKey={key} editValues={familyValues}
+                onChange={(k, v) => setFamilyValues(prev => ({ ...prev, [k]: v }))} />
+            ))}
+
+            <p className="text-xs font-semibold text-[#888888] uppercase tracking-wide mt-4 mb-1">Family Shul</p>
+            {([
+              { key: 'family_shul_name', label: 'Shul Name' },
+              { key: 'family_shul_address', label: 'Shul Address' },
+            ] as const).map(({ key, label }) => (
+              <FieldRow key={key} label={label} value={familyValues[key as keyof typeof familyValues]}
+                editable editMode fieldKey={key} editValues={familyValues}
+                onChange={(k, v) => setFamilyValues(prev => ({ ...prev, [k]: v }))} />
+            ))}
+
+            <FieldRow label="Number of Siblings" value={familyValues.num_siblings} editable editMode inputType="number"
+              fieldKey="num_siblings" editValues={familyValues}
+              onChange={(k, v) => setFamilyValues(prev => ({ ...prev, [k]: v }))} />
             <FieldRow label="Family Notes" value={familyValues.family_notes} editable editMode inputType="textarea"
               fieldKey="family_notes" editValues={familyValues}
               onChange={(k, v) => setFamilyValues(prev => ({ ...prev, [k]: v }))} />
+
+            {/* FIX 13: Family Rav */}
+            <p className="text-xs font-semibold text-[#888888] uppercase tracking-wide mt-4 mb-1">Family Rav</p>
+            {([
+              { key: 'family_rav_name', label: "Rav's Name" },
+              { key: 'family_rav_phone', label: "Rav's Phone" },
+              { key: 'family_rav_shul', label: 'Shul' },
+            ] as const).map(({ key, label }) => (
+              <FieldRow key={key} label={label} value={familyValues[key as keyof typeof familyValues]}
+                editable editMode fieldKey={key} editValues={familyValues}
+                onChange={(k, v) => setFamilyValues(prev => ({ ...prev, [k]: v }))} />
+            ))}
+
             <SectionSaveBar saving={savingFamily} error={familyError} onSave={saveFamily} />
           </div>
         </Tabs.Content>
@@ -1153,7 +1298,7 @@ export default function SingleProfilePage() {
             <SectionSaveBar saving={savingRefs} error={refsError} onSave={saveReferences} />
           </div>
 
-          {/* AI raw data */}
+          {/* AI raw data — info only, never auto-populates */}
           {aiRawData && Object.values(aiRawData).some(Boolean) && (
             <div className="card mt-4 border-yellow-200 bg-yellow-50">
               <h3 className="font-semibold text-yellow-800 mb-3 flex items-center gap-2"><Sparkles className="h-4 w-4" /> Other info found in your resume</h3>
@@ -1165,7 +1310,7 @@ export default function SingleProfilePage() {
                   <div className="sm:col-span-2"><p className="field-label">Siblings</p><p className="text-sm text-[#1A1A1A] whitespace-pre-wrap">{aiRawData.siblings}</p></div>
                 )}
                 {aiRawData.references && (
-                  <div className="sm:col-span-2"><p className="field-label">References (from resume)</p><p className="text-sm text-[#1A1A1A] whitespace-pre-wrap">{aiRawData.references}</p></div>
+                  <div className="sm:col-span-2"><p className="field-label">References (from resume — review and enter manually above)</p><p className="text-sm text-[#1A1A1A] whitespace-pre-wrap">{aiRawData.references}</p></div>
                 )}
                 {aiRawData.raw_notes && (
                   <div className="sm:col-span-2"><p className="field-label">Additional notes</p><p className="text-sm text-[#1A1A1A] whitespace-pre-wrap">{aiRawData.raw_notes}</p></div>
@@ -1175,28 +1320,224 @@ export default function SingleProfilePage() {
           )}
         </Tabs.Content>
 
-        {/* ── Shadchanim Who Know Me ───────────────────────────────────────── */}
+        {/* ── Photos & Resume ──────────────────────────────────────────────── */}
+        {/* FIX 4: confirm dialogs; FIX 5: photo visibility */}
+        <Tabs.Content value="photos">
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-semibold text-[#1A1A1A]">Profile Photos</h3>
+                <p className="text-xs text-[#888888] mt-0.5">Up to 5 photos · First photo is your main profile photo</p>
+              </div>
+              {photos.length < 5 && (
+                <Button variant="outline-maroon" size="sm" onClick={handlePhotoPickerClick} disabled={photoUploading} className="gap-1.5">
+                  {photoUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  Add Photo
+                </Button>
+              )}
+            </div>
+
+            {/* FIX 5: Photo visibility */}
+            <div className="flex items-center gap-3 mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200">
+              <Lock className="h-4 w-4 text-[#555555] flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-[#555555]">Photo Visibility</p>
+                <p className="text-xs text-[#888888] mt-0.5">Control who can see your photos</p>
+              </div>
+              <select
+                className="input-base text-sm"
+                value={photoVisibility}
+                disabled={savingPhotoVisibility}
+                onChange={async e => {
+                  const val = e.target.value
+                  setPhotoVisibility(val)
+                  await savePhotoVisibility(val)
+                }}
+              >
+                <option value="shadchanim_only">Shadchanim Only</option>
+                <option value="all">All Users</option>
+                <option value="hidden">Hidden</option>
+              </select>
+            </div>
+
+            {photoError && <p className="mb-3 text-sm text-red-600">{photoError}</p>}
+
+            {photos.length === 0 ? (
+              <button onClick={handlePhotoPickerClick} disabled={photoUploading}
+                className="w-full flex flex-col items-center justify-center gap-3 border-2 border-dashed border-gray-200 hover:border-brand-maroon rounded-xl p-10 text-center transition-colors group">
+                {photoUploading
+                  ? <Loader2 className="h-8 w-8 text-brand-maroon animate-spin" />
+                  : <Camera className="h-8 w-8 text-gray-300 group-hover:text-brand-maroon transition-colors" />}
+                <span className="text-sm font-medium text-[#555555] group-hover:text-brand-maroon transition-colors">Upload your first photo</span>
+                <span className="text-xs text-[#AAAAAA]">JPG, PNG or WebP · Max 5 MB</span>
+              </button>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {photos.map((photo, idx) => (
+                  <div key={photo.id} className="relative group aspect-square rounded-xl overflow-hidden border border-gray-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photo.public_url} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                    {idx === 0 && (
+                      <div className="absolute top-1.5 start-1.5 bg-brand-maroon text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">Main</div>
+                    )}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                      <div className="flex gap-1">
+                        <button onClick={() => handleMovePhoto(photo.id, 'up')} disabled={idx === 0}
+                          className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg disabled:opacity-30 transition-colors" aria-label="Move left">
+                          <ChevronUp className="h-3.5 w-3.5 text-white" />
+                        </button>
+                        <button onClick={() => handleMovePhoto(photo.id, 'down')} disabled={idx === photos.length - 1}
+                          className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg disabled:opacity-30 transition-colors" aria-label="Move right">
+                          <ChevronDown className="h-3.5 w-3.5 text-white" />
+                        </button>
+                      </div>
+                      <button onClick={() => setConfirmDeletePhotoId(photo.id)}
+                        className="p-1.5 bg-red-500/80 hover:bg-red-600 rounded-lg transition-colors" aria-label="Delete">
+                        <Trash2 className="h-3.5 w-3.5 text-white" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {photos.length < 5 && (
+                  <button onClick={handlePhotoPickerClick} disabled={photoUploading}
+                    className="aspect-square rounded-xl border-2 border-dashed border-gray-200 hover:border-brand-maroon flex flex-col items-center justify-center gap-1.5 transition-colors group">
+                    {photoUploading
+                      ? <Loader2 className="h-6 w-6 text-brand-maroon animate-spin" />
+                      : <Plus className="h-6 w-6 text-gray-300 group-hover:text-brand-maroon transition-colors" />}
+                    <span className="text-xs text-[#888888] group-hover:text-brand-maroon">Add</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Resume upload */}
+            <div className="mt-6 pt-6 border-t border-gray-100">
+              <h3 className="font-semibold text-[#1A1A1A] mb-1">Shidduch Resume</h3>
+              <p className="text-xs text-[#888888] mb-3">Upload your shidduch resume — we&apos;ll fill in your profile automatically.</p>
+              {resumeParsing ? (
+                <div className="flex items-center gap-3 py-6 justify-center">
+                  <Loader2 className="h-5 w-5 text-brand-maroon animate-spin" />
+                  <p className="text-sm text-[#555555]">Reading your resume…</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <button onClick={handleResumePickerClick}
+                    className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 hover:border-brand-maroon rounded-xl p-5 text-center transition-colors group">
+                    <FileText className="h-7 w-7 text-gray-300 group-hover:text-brand-maroon transition-colors" />
+                    <span className="text-sm font-medium text-[#555555] group-hover:text-brand-maroon transition-colors">
+                      {resumeUrl ? 'Upload a new resume' : 'Upload resume'}
+                    </span>
+                    <span className="text-xs text-[#AAAAAA]">PDF, JPG or PNG · Max 10 MB</span>
+                  </button>
+                  {resumeUrl && (
+                    <div className="flex items-center gap-3">
+                      <a href={resumeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-brand-maroon hover:underline">
+                        <FileText className="h-3.5 w-3.5" /> View uploaded resume
+                      </a>
+                      <button onClick={() => setConfirmDeleteResume(true)} className="flex items-center gap-1 text-xs text-red-500 hover:underline">
+                        <Trash2 className="h-3 w-3" /> Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {resumeError && <p className="mt-2 text-sm text-red-600">{resumeError}</p>}
+            </div>
+          </div>
+        </Tabs.Content>
+
+        {/* ── Shadchanim ───────────────────────────────────────────────────── */}
+        {/* FIX 14: search/add shadchan + familiar list */}
         <Tabs.Content value="shadchanim">
+          {/* Add a Shadchan */}
+          <div className="card mb-5">
+            <h3 className="font-semibold text-[#1A1A1A] mb-1 flex items-center gap-2">
+              <UserPlus className="h-4 w-4 text-brand-maroon" />
+              Add a Shadchan You Know
+            </h3>
+            <p className="text-xs text-[#888888] mb-4">
+              Search for a shadchan you are personally familiar with. They will be notified that you added them.
+            </p>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#888888]" />
+              <Input
+                placeholder="Search by name…"
+                className="pl-9"
+                value={shadchanSearch}
+                onChange={e => setShadchanSearch(e.target.value)}
+              />
+            </div>
+
+            {shadchanSearchLoading && (
+              <p className="text-sm text-[#888888] py-3 text-center"><Loader2 className="inline h-4 w-4 animate-spin mr-1" />Searching…</p>
+            )}
+
+            {!shadchanSearchLoading && shadchanSearchResults.length > 0 && (
+              <div className="mt-2 divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+                {shadchanSearchResults.map(sh => {
+                  const alreadyAdded = familiarShadchanim.some(f => f.shadchan_id === sh.id)
+                  return (
+                    <div key={sh.id} className="flex items-center justify-between p-3 bg-white hover:bg-gray-50">
+                      <div>
+                        <p className="text-sm font-medium text-[#1A1A1A]">{sh.full_name}</p>
+                        {sh.location && <p className="text-xs text-[#888888]">{sh.location}</p>}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={alreadyAdded ? 'secondary' : 'outline-maroon'}
+                        disabled={alreadyAdded || addingShadchan === sh.id}
+                        onClick={() => handleAddShadchan(sh.id)}
+                        className="gap-1.5 shrink-0"
+                      >
+                        {addingShadchan === sh.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : alreadyAdded
+                            ? <Check className="h-3.5 w-3.5" />
+                            : <Plus className="h-3.5 w-3.5" />}
+                        {alreadyAdded ? 'Added' : 'Add'}
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {!shadchanSearchLoading && shadchanSearch.trim().length >= 2 && shadchanSearchResults.length === 0 && (
+              <p className="text-sm text-[#888888] mt-3 text-center">No shadchanim found for &ldquo;{shadchanSearch}&rdquo;</p>
+            )}
+          </div>
+
+          {/* Familiar shadchanim list */}
           <div className="card">
             <h3 className="font-semibold text-[#1A1A1A] mb-1">Shadchanim Who Know Me</h3>
             <p className="text-xs text-[#888888] mb-4">
-              These shadchanim have indicated that they are personally familiar with you and your background.
+              These shadchanim have been added to your profile as people who know you personally.
             </p>
             {familiarLoading ? (
               <p className="text-sm text-[#888888] py-4 text-center">Loading…</p>
             ) : familiarShadchanim.length === 0 ? (
               <p className="text-sm text-[#888888] py-4 text-center">
-                No shadchanim have indicated familiarity with you yet.
+                No shadchanim added yet. Search above to add one.
               </p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {familiarShadchanim.map((sh, i) => (
-                  <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-[#FAFAFA]">
+                {familiarShadchanim.map((sh) => (
+                  <div key={sh.shadchan_id} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-[#FAFAFA]">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-[#1A1A1A]">{sh.full_name}</p>
                       <p className="text-xs text-[#888888] mt-0.5">{sh.city}</p>
                       {sh.phone && <p className="text-xs text-[#555555] mt-0.5">{sh.phone}</p>}
                     </div>
+                    <button
+                      onClick={() => handleRemoveShadchan(sh.shadchan_id)}
+                      disabled={removingShadchan === sh.shadchan_id}
+                      className="p-1.5 text-[#888888] hover:text-red-500 transition-colors flex-shrink-0"
+                      aria-label="Remove"
+                    >
+                      {removingShadchan === sh.shadchan_id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <X className="h-3.5 w-3.5" />}
+                    </button>
                   </div>
                 ))}
               </div>

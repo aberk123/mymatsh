@@ -8,14 +8,12 @@ import {
   Heart,
   MessageSquare,
   Eye,
-  User,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { WelcomeBanner } from '@/components/ui/welcome-banner'
 import { StatCard } from '@/components/ui/stat-card'
 import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Avatar } from '@/components/ui/avatar'
 import type { NavItem } from '@/components/ui/sidebar'
 import { createClient } from '@/lib/supabase/client'
 
@@ -24,12 +22,6 @@ interface SuggestionRow {
   status: string
   message: string | null
   created_at: string
-}
-
-interface ShadchanInfo {
-  name: string
-  location: string
-  email: string
 }
 
 const statusMessages: Record<string, string> = {
@@ -54,7 +46,6 @@ export default function SingleDashboardPage() {
   const [singleRecord, setSingleRecord] = useState<Record<string, unknown> | null>(null)
   const [suggestions, setSuggestions] = useState<SuggestionRow[]>([])
   const [unreadMessages, setUnreadMessages] = useState(0)
-  const [shadchan, setShadchan] = useState<ShadchanInfo | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -98,31 +89,6 @@ export default function SingleDashboardPage() {
         .eq('is_read', false) as { count: number | null }
 
       setUnreadMessages(count ?? 0)
-
-      // Assigned shadchan from accepted representation request
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: repr } = await (supabase.from('representation_requests') as any)
-        .select('shadchan_id')
-        .eq('single_id', singleId)
-        .eq('status', 'accepted')
-        .maybeSingle() as { data: { shadchan_id: string } | null }
-
-      if (repr?.shadchan_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: sp } = await (supabase.from('shadchan_profiles') as any)
-          .select('full_name, city, state, email')
-          .eq('id', repr.shadchan_id)
-          .maybeSingle() as { data: { full_name: string; city: string | null; state: string | null; email: string | null } | null }
-
-        if (sp) {
-          setShadchan({
-            name: sp.full_name,
-            location: [sp.city, sp.state].filter(Boolean).join(', '),
-            email: sp.email ?? '',
-          })
-        }
-      }
-
       setLoading(false)
     }
 
@@ -236,38 +202,6 @@ export default function SingleDashboardPage() {
         </div>
       </div>
 
-      {/* Your Shadchan */}
-      <div className="card mt-6">
-        <h3 className="font-semibold text-[#1A1A1A] mb-4">Your Shadchan</h3>
-        {shadchan ? (
-          <div className="flex items-center gap-4">
-            <Avatar name={shadchan.name} size="lg" />
-            <div className="flex-1">
-              <p className="font-semibold text-[#1A1A1A]">{shadchan.name}</p>
-              {shadchan.location && <p className="text-sm text-[#555555]">{shadchan.location}</p>}
-              {shadchan.email && <p className="text-sm text-[#888888] mt-0.5">{shadchan.email}</p>}
-            </div>
-            <Link href="/portal/single/messages">
-              <Button variant="primary" size="sm" className="gap-2">
-                <MessageSquare className="h-3.5 w-3.5" />
-                Send Message
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-              <User className="h-6 w-6 text-gray-400" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-[#555555]">No shadchan assigned yet</p>
-              <p className="text-xs text-[#888888] mt-0.5">
-                A shadchan will be linked to your profile once one is assigned.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
     </AppLayout>
   )
 }

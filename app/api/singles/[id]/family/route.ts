@@ -85,8 +85,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ('error' in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status })
 
   const body = await req.json() as Record<string, unknown>
-  const allowed = ['fathers_name', 'fathers_occupation', 'mothers_name', 'mothers_maiden_name',
-    'mothers_occupation', 'num_siblings', 'siblings_detail', 'grandparents', 'family_notes']
+  const allowed = [
+    'fathers_name', 'fathers_occupation', 'mothers_name', 'mothers_maiden_name',
+    'mothers_occupation', 'num_siblings', 'siblings_detail', 'grandparents', 'family_notes',
+    'father_hebrew_name', 'mother_hebrew_name',
+    'father_phone', 'mother_phone', 'father_email', 'mother_email',
+    'family_shul_name', 'family_shul_address',
+    'family_rav_name', 'family_rav_phone', 'family_rav_shul',
+  ]
   const payload: Record<string, unknown> = { single_id: id, updated_at: new Date().toISOString() }
   for (const k of allowed) if (k in body) payload[k] = body[k]
 

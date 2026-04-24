@@ -22,6 +22,7 @@ export async function POST(request: Request) {
       bestDay,
       bestTime,
       reference,
+      claim_single_id,
     } = body
 
     if (!role || !password) {
@@ -127,19 +128,39 @@ export async function POST(request: Request) {
       }
     }
 
-    // For singles: create a linked singles record immediately so the profile page works
+    // For singles: link to existing record (claim) or create a new one
     if (role === 'single') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: singleError } = await (adminClient.from('singles') as any).insert({
-        user_id: data.user.id,
-        first_name: firstName ?? '',
-        last_name: lastName ?? '',
-        email: email?.trim() || null,
-        phone: phone?.trim() || null,
-        status: 'draft',
-      })
-      if (singleError && process.env.NODE_ENV === 'development') {
-        console.error('[signup] failed to create singles record:', singleError)
+      if (claim_single_id) {
+        // Link existing unclaimed single record to this new user
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: existing } = await (adminClient.from('singles') as any)
+          .select('user_id').eq('id', claim_single_id).maybeSingle() as { data: { user_id: string | null } | null }
+        if (existing && !existing.user_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (adminClient.from('singles') as any)
+            .update({ user_id: data.user.id })
+            .eq('id', claim_single_id)
+        } else {
+          // Unclaimed record no longer available — create fresh
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (adminClient.from('singles') as any).insert({
+            user_id: data.user.id, first_name: firstName ?? '', last_name: lastName ?? '',
+            email: email?.trim() || null, phone: phone?.trim() || null, status: 'draft',
+          })
+        }
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: singleError } = await (adminClient.from('singles') as any).insert({
+          user_id: data.user.id,
+          first_name: firstName ?? '',
+          last_name: lastName ?? '',
+          email: email?.trim() || null,
+          phone: phone?.trim() || null,
+          status: 'draft',
+        })
+        if (singleError && process.env.NODE_ENV === 'development') {
+          console.error('[signup] failed to create singles record:', singleError)
+        }
       }
     }
 
