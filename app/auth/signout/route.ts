@@ -25,5 +25,6 @@ export async function POST(request: Request) {
 
   await supabase.auth.signOut()
 
-  return NextResponse.redirect(new URL('/login', request.url))
+  // 303 forces GET on redirect — 307 (default) would re-POST to /login causing 405
+  return NextResponse.redirect(new URL('/login', request.url), { status: 303 })
 }
