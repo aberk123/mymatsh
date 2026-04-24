@@ -44,12 +44,12 @@ export async function POST(_request: Request, { params }: { params: { id: string
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  // Fetch profile including contact fields needed for notifications
+  // params.id is the users.id — look up profile by user_id (avoids client-side RLS issue)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile, error: fetchError } = await (adminClient.from('shadchan_profiles') as any)
-    .select('user_id, phone, email, full_name')
-    .eq('id', params.id)
-    .maybeSingle() as { data: { user_id: string; phone: string | null; email: string | null; full_name: string } | null; error: unknown }
+    .select('id, user_id, phone, email, full_name')
+    .eq('user_id', params.id)
+    .maybeSingle() as { data: { id: string; user_id: string; phone: string | null; email: string | null; full_name: string } | null; error: unknown }
 
   if (fetchError || !profile) {
     return NextResponse.json({ error: 'Shadchan profile not found' }, { status: 404 })
@@ -62,7 +62,7 @@ export async function POST(_request: Request, { params }: { params: { id: string
       approved_at: new Date().toISOString(),
       approved_by_admin_id: user.id,
     })
-    .eq('id', params.id)
+    .eq('id', profile.id)
 
   if (profileError) {
     return NextResponse.json({ error: (profileError as { message: string }).message }, { status: 500 })

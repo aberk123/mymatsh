@@ -40,11 +40,11 @@ export async function POST(_request: Request, { params }: { params: { id: string
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  // Fetch the profile to get the linked user_id
+  // params.id is the users.id — look up profile by user_id (avoids client-side RLS issue)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile, error: fetchError } = await (adminClient.from('shadchan_profiles') as any)
     .select('user_id')
-    .eq('id', params.id)
+    .eq('user_id', params.id)
     .maybeSingle() as { data: { user_id: string } | null; error: unknown }
 
   if (fetchError || !profile) {

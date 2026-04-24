@@ -66,8 +66,6 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1)
   const [addUserOpen, setAddUserOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  // maps users.id → shadchan_profiles.id for shadchan-role users
-  const [shadchanProfileMap, setShadchanProfileMap] = useState<Record<string, string>>({})
   const pageSize = 10
 
   useEffect(() => {
@@ -80,21 +78,6 @@ export default function AdminUsersPage() {
         .order('created_at', { ascending: false }) as { data: UserRow[] | null }
 
       setUsers(rows ?? [])
-
-      // Pre-fetch shadchan_profiles ids so approve/reject know which profile to target
-      const shadchanUserIds = (rows ?? [])
-        .filter((u: UserRow) => u.role === 'shadchan')
-        .map((u: UserRow) => u.id)
-      if (shadchanUserIds.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: profiles } = await (supabase.from('shadchan_profiles') as any)
-          .select('id, user_id')
-          .in('user_id', shadchanUserIds) as { data: Array<{ id: string; user_id: string }> | null }
-        const map: Record<string, string> = {}
-        for (const p of profiles ?? []) map[p.user_id] = p.id
-        setShadchanProfileMap(map)
-      }
-
       setLoading(false)
     }
 
@@ -118,11 +101,9 @@ export default function AdminUsersPage() {
   const suspendedCount = users.filter((u) => u.status === 'suspended').length
 
   async function handleApproveShadchan(userId: string) {
-    const profileId = shadchanProfileMap[userId]
-    if (!profileId) return
     setActionLoading(userId)
     try {
-      const res = await fetch(`/api/admin/shadchanim/${profileId}/approve`, { method: 'POST' })
+      const res = await fetch(`/api/admin/shadchanim/${userId}/approve`, { method: 'POST' })
       if (res.ok) {
         setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: 'active' } : u))
       }
@@ -132,13 +113,11 @@ export default function AdminUsersPage() {
   }
 
   async function handleRejectShadchan(userId: string) {
-    const profileId = shadchanProfileMap[userId]
-    if (!profileId) return
     setActionLoading(userId)
     try {
-      const res = await fetch(`/api/admin/shadchanim/${profileId}/reject`, { method: 'POST' })
+      const res = await fetch(`/api/admin/shadchanim/${userId}/reject`, { method: 'POST' })
       if (res.ok) {
-        setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: 'suspended' } : u))
+        setUsers((prev) => prev.filter((u) => u.id !== userId))
       }
     } catch { /* ignore */ } finally {
       setActionLoading(null)
@@ -258,7 +237,7 @@ export default function AdminUsersPage() {
                               <Button
                                 size="sm"
                                 className="gap-1 bg-green-600 hover:bg-green-700 text-white border-green-600"
-                                disabled={actionLoading === user.id || !shadchanProfileMap[user.id]}
+                                disabled={actionLoading === user.id}
                                 onClick={() => handleApproveShadchan(user.id)}
                               >
                                 <CheckCircle className="h-3.5 w-3.5" />
@@ -268,7 +247,7 @@ export default function AdminUsersPage() {
                                 variant="danger"
                                 size="sm"
                                 className="gap-1"
-                                disabled={actionLoading === user.id || !shadchanProfileMap[user.id]}
+                                disabled={actionLoading === user.id}
                                 onClick={() => handleRejectShadchan(user.id)}
                               >
                                 <XCircle className="h-3.5 w-3.5" />
