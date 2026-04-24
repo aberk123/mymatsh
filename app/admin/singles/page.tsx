@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Upload,
   PackageOpen,
+  FileText,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
@@ -248,6 +249,15 @@ export default function AdminSinglesPage() {
           >
             <Upload className="h-3.5 w-3.5" />
             Import from Evernote
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => router.push('/admin/singles/import-csv')}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Import from CSV
           </Button>
         </div>
 
