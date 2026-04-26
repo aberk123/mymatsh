@@ -18,6 +18,7 @@ import {
   FileText,
   Sparkles,
   Loader2,
+  ExternalLink,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useUnreadMessageCount } from '@/lib/use-unread-messages'
@@ -28,7 +29,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { WizardProgress, Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import type { NavItem } from '@/components/ui/sidebar'
-
 
 const wizardSteps = [
   { index: 0, label: 'Basic Info' },
@@ -73,6 +73,82 @@ type FormValues = {
   pledge_amount: number
   privacy_show_photo: boolean
   privacy_show_contact: boolean
+}
+
+interface DuplicateRecord {
+  id: string
+  first_name: string
+  last_name: string
+  age: number | null
+  dob: string | null
+  phone: string | null
+  city: string | null
+  state: string | null
+  address: string | null
+  height_inches: number | null
+  current_yeshiva_seminary: string | null
+  eretz_yisroel: string | null
+  plans: string | null
+  looking_for: string | null
+  family_background: string | null
+  siblings: string | null
+  about_bio: string | null
+  photo_url: string | null
+}
+
+const MERGE_FIELDS_UI: Array<{
+  key: string
+  label: string
+  format?: (v: unknown) => string
+}> = [
+  { key: 'phone', label: 'Phone' },
+  { key: 'dob', label: 'Date of Birth' },
+  { key: 'age', label: 'Age' },
+  { key: 'city', label: 'City' },
+  { key: 'state', label: 'State' },
+  { key: 'address', label: 'Address' },
+  {
+    key: 'height_inches', label: 'Height',
+    format: (v) => v ? `${Math.floor(Number(v) / 12)}'${Number(v) % 12}"` : '',
+  },
+  { key: 'current_yeshiva_seminary', label: 'Yeshiva / Seminary' },
+  { key: 'eretz_yisroel', label: 'Eretz Yisroel' },
+  { key: 'plans', label: 'Plans' },
+  { key: 'looking_for', label: 'Looking For' },
+  { key: 'family_background', label: 'Family Background' },
+  { key: 'siblings', label: 'Siblings' },
+  { key: 'about_bio', label: 'About / Bio' },
+  { key: 'photo_url', label: 'Photo URL' },
+]
+
+function getNewFieldValue(key: string, data: FormValues): unknown {
+  if (key === 'height_inches') {
+    const hi = (data.height_feet || 0) * 12 + (data.height_inches_rem || 0)
+    return hi > 0 ? hi : null
+  }
+  const v = (data as Record<string, unknown>)[key]
+  return v !== undefined && v !== '' && v !== null ? v : null
+}
+
+function displayValue(key: string, value: unknown, format?: (v: unknown) => string): string {
+  if (value === null || value === undefined || value === '') return '—'
+  if (format) return format(value) || '—'
+  const str = String(value)
+  return str.length > 100 ? str.slice(0, 100) + '…' : str
+}
+
+function initMergeSelections(existing: DuplicateRecord, data: FormValues): Record<string, 'existing' | 'new'> {
+  const sel: Record<string, 'existing' | 'new'> = {}
+  for (const { key } of MERGE_FIELDS_UI) {
+    const ev = (existing as unknown as Record<string, unknown>)[key]
+    const nv = getNewFieldValue(key, data)
+    const hasE = ev !== null && ev !== undefined && ev !== ''
+    const hasN = nv !== null && nv !== undefined && nv !== ''
+    if (hasE || hasN) {
+      sel[key] = hasE ? 'existing' : 'new'
+    }
+  }
+  return sel
 }
 
 // Map Claude field names → form field names
@@ -145,9 +221,15 @@ export default function NewSinglePage() {
   const [currentStep, setCurrentStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
-  const [dupWarning, setDupWarning] = useState<string | null>(null)
-  const [mergeResult, setMergeResult] = useState<{ id: string; fields_added: string[]; fields_skipped: string[] } | null>(null)
   const [familiarityPopup, setFamiliarityPopup] = useState<string | null>(null)
+
+  // Duplicate detection state
+  const [detectedDuplicate, setDetectedDuplicate] = useState<DuplicateRecord | null>(null)
+  const [dupModalOpen, setDupModalOpen] = useState(false)
+  const [dupMergeMode, setDupMergeMode] = useState(false)
+  const [mergeSelections, setMergeSelections] = useState<Record<string, 'existing' | 'new'>>({})
+  const [pendingFormData, setPendingFormData] = useState<FormValues | null>(null)
+  const [merging, setMerging] = useState(false)
 
   // Resume AI state
   const [resumeParsing, setResumeParsing] = useState(false)
@@ -199,7 +281,6 @@ export default function NewSinglePage() {
       let count = 0
       const filled = new Set<string>()
 
-      // Standard field map
       for (const [claudeKey, formKey] of Object.entries(FIELD_MAP)) {
         if (!formKey) continue
         const val = fields[claudeKey]
@@ -210,7 +291,6 @@ export default function NewSinglePage() {
         }
       }
 
-      // Gender
       const genderVal = fields.gender
       if (genderVal === 'male' || genderVal === 'female') {
         setValue('gender', genderVal)
@@ -218,7 +298,6 @@ export default function NewSinglePage() {
         count++
       }
 
-      // Age (integer)
       const ageVal = fields.age
       if (typeof ageVal === 'number' && ageVal > 0) {
         setValue('age', ageVal)
@@ -226,7 +305,6 @@ export default function NewSinglePage() {
         count++
       }
 
-      // Height: split total inches into feet + remainder
       const hInches = fields.height_inches
       if (typeof hInches === 'number' && hInches > 0) {
         setValue('height_feet', Math.floor(hInches / 12))
@@ -235,7 +313,6 @@ export default function NewSinglePage() {
         count++
       }
 
-      // Hashkafa: normalize to select value
       const hashkafaVal = fields.hashkafa
       if (hashkafaVal && typeof hashkafaVal === 'string') {
         setValue('hashkafa', normalizeHashkafa(hashkafaVal))
@@ -243,7 +320,6 @@ export default function NewSinglePage() {
         count++
       }
 
-      // Resume URL from storage upload
       if (json.resumeUrl) {
         setValue('resume_url', json.resumeUrl)
       }
@@ -254,12 +330,47 @@ export default function NewSinglePage() {
       setResumeParseError('Network error. Please try again.')
     } finally {
       setResumeParsing(false)
-      // Reset input so same file can be re-uploaded
       if (resumeInputRef.current) resumeInputRef.current.value = ''
     }
   }
 
-  const onSubmit = async (data: FormValues) => {
+  // Real-time duplicate detection: trigger when name + (phone or dob) are all filled
+  const watchedFirst = watch('first_name')
+  const watchedLast = watch('last_name')
+  const watchedPhone = watch('phone')
+  const watchedDob = watch('dob')
+
+  useEffect(() => {
+    const firstName = watchedFirst?.trim() ?? ''
+    const lastName = watchedLast?.trim() ?? ''
+    const phone = watchedPhone?.trim() ?? ''
+    const dob = watchedDob?.trim() ?? ''
+
+    if (!firstName || !lastName || (!phone && !dob)) {
+      setDetectedDuplicate(null)
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      const supabase = createClient()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase.from('singles') as any)
+        .select('id, first_name, last_name, age, dob, phone, city, state, address, height_inches, current_yeshiva_seminary, eretz_yisroel, plans, looking_for, family_background, siblings, about_bio, photo_url')
+        .ilike('first_name', firstName)
+        .ilike('last_name', lastName)
+        .limit(1) as { data: DuplicateRecord[] | null }
+
+      if (data && data.length > 0) {
+        setDetectedDuplicate(data[0])
+      } else {
+        setDetectedDuplicate(null)
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [watchedFirst, watchedLast, watchedPhone, watchedDob])
+
+  async function doSaveNew(data: FormValues) {
     setSaving(true)
     setSaveError('')
     const heightInches = data.height_feet * 12 + data.height_inches_rem
@@ -280,16 +391,8 @@ export default function NewSinglePage() {
         setSaveError(json.error ?? 'Failed to save. Please try again.')
         return
       }
-      const json = await res.json() as {
-        id: string
-        status: 'created' | 'merged'
-        fields_added?: string[]
-        fields_skipped?: string[]
-      }
-      if (json.status === 'merged') {
-        setMergeResult({ id: json.id, fields_added: json.fields_added ?? [], fields_skipped: json.fields_skipped ?? [] })
-        return
-      }
+      const json = await res.json() as { id: string }
+      setDupModalOpen(false)
       setFamiliarityPopup(json.id)
     } catch {
       setSaveError('Network error. Please try again.')
@@ -298,35 +401,71 @@ export default function NewSinglePage() {
     }
   }
 
+  function openMergeComparison() {
+    if (!detectedDuplicate || !pendingFormData) return
+    setMergeSelections(initMergeSelections(detectedDuplicate, pendingFormData))
+    setDupMergeMode(true)
+  }
+
+  async function doMerge() {
+    if (!detectedDuplicate || !pendingFormData) return
+    setMerging(true)
+    setSaveError('')
+
+    const updates: Record<string, unknown> = {}
+    for (const { key } of MERGE_FIELDS_UI) {
+      if (mergeSelections[key] === 'new') {
+        updates[key] = getNewFieldValue(key, pendingFormData)
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/singles/${detectedDuplicate.id}/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      })
+      if (!res.ok) {
+        const json = await res.json()
+        setSaveError(json.error ?? 'Merge failed. Please try again.')
+        return
+      }
+      setDupModalOpen(false)
+      setDupMergeMode(false)
+      setFamiliarityPopup(detectedDuplicate.id)
+    } catch {
+      setSaveError('Network error. Please try again.')
+    } finally {
+      setMerging(false)
+    }
+  }
+
+  const onSubmit = async (data: FormValues) => {
+    if (detectedDuplicate) {
+      setPendingFormData(data)
+      setDupMergeMode(false)
+      setDupModalOpen(true)
+      return
+    }
+    await doSaveNew(data)
+  }
+
   const next = () => setCurrentStep((s) => Math.min(s + 1, wizardSteps.length - 1))
   const back = () => setCurrentStep((s) => Math.max(s - 1, 0))
 
   const watchedGender = watch('gender')
-  const watchedFirst = watch('first_name')
-  const watchedLast = watch('last_name')
 
-  useEffect(() => {
-    if (!watchedFirst?.trim() || !watchedLast?.trim()) { setDupWarning(null); return }
-    const timer = setTimeout(async () => {
-      const supabase = createClient()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase.from('singles') as any)
-        .select('id, first_name, last_name')
-        .ilike('first_name', watchedFirst.trim())
-        .ilike('last_name', watchedLast.trim())
-        .limit(1) as { data: Array<{ id: string; first_name: string; last_name: string }> | null }
-      if (data && data.length > 0) {
-        setDupWarning(`${data[0].first_name} ${data[0].last_name}`)
-      } else {
-        setDupWarning(null)
-      }
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [watchedFirst, watchedLast])
+  // Build comparison rows for the merge table
+  const mergeRows = detectedDuplicate && pendingFormData
+    ? MERGE_FIELDS_UI.filter(({ key }) => {
+        const ev = (detectedDuplicate as unknown as Record<string, unknown>)[key]
+        const nv = getNewFieldValue(key, pendingFormData)
+        return (ev !== null && ev !== undefined && ev !== '') || (nv !== null && nv !== undefined && nv !== '')
+      })
+    : []
 
   return (
     <AppLayout navItems={navItems} title="Add New Single" role="shadchan">
-      {/* Back link */}
       <div className="mb-4">
         <Link href="/dashboard/singles" className="inline-flex items-center gap-1.5 text-sm text-[#555555] hover:text-brand-maroon transition-colors">
           <ChevronLeft className="h-4 w-4" />
@@ -341,67 +480,65 @@ export default function NewSinglePage() {
         </div>
 
         {/* Resume Upload Card */}
-        {!mergeResult && (
-          <div className="card p-5 mb-5">
-            <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-lg bg-yellow-50 border border-yellow-200 flex items-center justify-center flex-shrink-0">
-                <Sparkles className="h-4 w-4 text-yellow-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-[#1A1A1A]">Quick Start: Upload Shidduch Résumé</p>
-                <p className="text-xs text-[#888888] mt-0.5">
-                  Upload a PDF or image and Claude AI will pre-fill the form fields automatically.
-                </p>
+        <div className="card p-5 mb-5">
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 rounded-lg bg-yellow-50 border border-yellow-200 flex items-center justify-center flex-shrink-0">
+              <Sparkles className="h-4 w-4 text-yellow-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[#1A1A1A]">Quick Start: Upload Shidduch Résumé</p>
+              <p className="text-xs text-[#888888] mt-0.5">
+                Upload a PDF or image and Claude AI will pre-fill the form fields automatically.
+              </p>
 
-                {resumeFieldsFilled > 0 && (
-                  <div className="mt-2 flex items-center gap-1.5 text-xs text-green-700 font-medium">
-                    <CheckCircle className="h-3.5 w-3.5" />
-                    {resumeFieldsFilled} field{resumeFieldsFilled !== 1 ? 's' : ''} pre-filled from{' '}
-                    <span className="font-semibold truncate max-w-[160px]">{resumeFileName}</span>
-                  </div>
-                )}
-
-                {resumeParseError && (
-                  <p className="mt-2 text-xs text-red-600">{resumeParseError}</p>
-                )}
-
-                <div className="mt-3 flex items-center gap-3">
-                  <input
-                    ref={resumeInputRef}
-                    id="resume-upload"
-                    type="file"
-                    accept=".pdf,.jpg,.jpeg,.png,.webp"
-                    capture="environment"
-                    className="hidden"
-                    onChange={handleResumeUpload}
-                    disabled={resumeParsing}
-                  />
-                  <label
-                    htmlFor="resume-upload"
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
-                      resumeParsing
-                        ? 'bg-gray-50 border-gray-200 text-[#888888] cursor-not-allowed'
-                        : 'bg-white border-gray-300 text-[#1A1A1A] hover:border-brand-maroon hover:text-brand-maroon'
-                    }`}
-                  >
-                    {resumeParsing ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Parsing résumé…
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="h-3.5 w-3.5" />
-                        {resumeFieldsFilled > 0 ? 'Upload Different Résumé' : 'Choose Résumé File'}
-                      </>
-                    )}
-                  </label>
-                  <span className="text-xs text-[#AAAAAA]">PDF, JPG, PNG or WebP · max 10 MB</span>
+              {resumeFieldsFilled > 0 && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-green-700 font-medium">
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  {resumeFieldsFilled} field{resumeFieldsFilled !== 1 ? 's' : ''} pre-filled from{' '}
+                  <span className="font-semibold truncate max-w-[160px]">{resumeFileName}</span>
                 </div>
+              )}
+
+              {resumeParseError && (
+                <p className="mt-2 text-xs text-red-600">{resumeParseError}</p>
+              )}
+
+              <div className="mt-3 flex items-center gap-3">
+                <input
+                  ref={resumeInputRef}
+                  id="resume-upload"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleResumeUpload}
+                  disabled={resumeParsing}
+                />
+                <label
+                  htmlFor="resume-upload"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                    resumeParsing
+                      ? 'bg-gray-50 border-gray-200 text-[#888888] cursor-not-allowed'
+                      : 'bg-white border-gray-300 text-[#1A1A1A] hover:border-brand-maroon hover:text-brand-maroon'
+                  }`}
+                >
+                  {resumeParsing ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Parsing résumé…
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-3.5 w-3.5" />
+                      {resumeFieldsFilled > 0 ? 'Upload Different Résumé' : 'Choose Résumé File'}
+                    </>
+                  )}
+                </label>
+                <span className="text-xs text-[#AAAAAA]">PDF, JPG, PNG or WebP · max 10 MB</span>
               </div>
             </div>
           </div>
-        )}
+        </div>
 
         {saveError && (
           <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
@@ -409,58 +546,27 @@ export default function NewSinglePage() {
           </div>
         )}
 
-        {dupWarning && !mergeResult && (
-          <div className="mb-4 p-3 rounded-lg bg-orange-50 border border-orange-200 text-sm text-orange-700 flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+        {/* Duplicate warning banner */}
+        {detectedDuplicate && (
+          <div className="mb-4 p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-sm text-yellow-800 flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-yellow-600" />
             <span>
-              A single named <span className="font-semibold">{dupWarning}</span> already exists on the platform.
-              Please verify this is not a duplicate before saving.
+              A single with a similar name already exists in the database. Please review before saving.{' '}
+              <a
+                href={`/dashboard/singles/${detectedDuplicate.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-0.5 font-semibold underline underline-offset-2 hover:text-yellow-900"
+              >
+                View Existing Record
+                <ExternalLink className="h-3 w-3" />
+              </a>
             </span>
           </div>
         )}
 
-        {mergeResult && (
-          <div className="mb-6 p-5 rounded-xl bg-green-50 border border-green-200 space-y-4">
-            <div className="flex items-center gap-2 text-green-700">
-              <CheckCircle className="h-5 w-5 flex-shrink-0" />
-              <p className="font-semibold text-sm">Merged into existing record</p>
-            </div>
-            <p className="text-sm text-green-800">
-              This single already existed in the database. Your data was merged in — blank fields were filled, existing data was not overwritten.
-            </p>
-            {mergeResult.fields_added.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-1.5">Fields added</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {mergeResult.fields_added.map(f => (
-                    <span key={f} className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{f}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {mergeResult.fields_skipped.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-[#888888] uppercase tracking-wide mb-1.5">Already filled (not overwritten)</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {mergeResult.fields_skipped.map(f => (
-                    <span key={f} className="text-xs bg-gray-100 text-[#555555] px-2 py-0.5 rounded-full">{f}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="flex gap-3 pt-1">
-              <Link href={`/dashboard/singles/${mergeResult.id}`}>
-                <Button variant="primary" size="sm">View Existing Record</Button>
-              </Link>
-              <Link href="/dashboard/singles">
-                <Button variant="secondary" size="sm">Back to My Singles</Button>
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* Wizard Progress */}
-        {!mergeResult && <div className="card p-0 overflow-hidden">
+        {/* Wizard */}
+        <div className="card p-0 overflow-hidden">
           <WizardProgress steps={wizardSteps} currentStep={currentStep} />
 
           <form onSubmit={handleSubmit(onSubmit)}>
@@ -834,7 +940,6 @@ export default function NewSinglePage() {
                       </label>
                     </div>
 
-                    {/* Summary */}
                     <div className="rounded-xl bg-[#FAFAFA] border border-gray-200 p-4 space-y-2">
                       <p className="text-sm font-semibold text-[#1A1A1A] mb-3">Review Summary</p>
                       {[
@@ -878,9 +983,174 @@ export default function NewSinglePage() {
               )}
             </div>
           </form>
-        </div>}
+        </div>
       </div>
 
+      {/* Duplicate resolution modal */}
+      <Dialog
+        open={dupModalOpen}
+        onOpenChange={(open) => {
+          if (!open) { setDupModalOpen(false); setDupMergeMode(false) }
+        }}
+      >
+        <DialogContent className={dupMergeMode ? 'max-w-2xl' : 'max-w-md'}>
+          <DialogHeader>
+            <DialogTitle>
+              {dupMergeMode ? 'Merge into Existing Record' : 'Possible Duplicate Found'}
+            </DialogTitle>
+          </DialogHeader>
+
+          {!dupMergeMode ? (
+            <>
+              <div className="px-6 pb-2 space-y-3">
+                <p className="text-sm text-[#555555]">
+                  A single named{' '}
+                  <span className="font-semibold text-[#1A1A1A]">
+                    {detectedDuplicate ? `${detectedDuplicate.first_name} ${detectedDuplicate.last_name}` : ''}
+                  </span>{' '}
+                  already exists in the database. How would you like to proceed?
+                </p>
+              </div>
+              <DialogFooter className="flex-col sm:flex-row gap-2 px-6 pb-4">
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => { setDupModalOpen(false); setDupMergeMode(false) }}
+                  disabled={saving || merging}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={openMergeComparison}
+                  disabled={saving || merging}
+                >
+                  Merge into Existing Record
+                </Button>
+                <Button
+                  variant="pink"
+                  size="md"
+                  disabled={saving || merging}
+                  onClick={() => pendingFormData && doSaveNew(pendingFormData)}
+                >
+                  {saving ? 'Saving…' : 'Save as New Single'}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <div className="px-6 pb-2">
+                <p className="text-xs text-[#888888] mb-3">
+                  Select which value to keep for each field. The chosen values will overwrite the existing record.
+                </p>
+                <div className="overflow-y-auto max-h-[55vh] border border-gray-100 rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-[#888888] uppercase tracking-wide w-28">Field</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-[#888888] uppercase tracking-wide">Existing Record</th>
+                        <th className="text-left px-3 py-2 text-xs font-semibold text-[#888888] uppercase tracking-wide">New Data</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mergeRows.map(({ key, label, format }) => {
+                        const existingRaw = (detectedDuplicate as unknown as Record<string, unknown>)[key]
+                        const newRaw = pendingFormData ? getNewFieldValue(key, pendingFormData) : null
+                        const hasE = existingRaw !== null && existingRaw !== undefined && existingRaw !== ''
+                        const hasN = newRaw !== null && newRaw !== undefined && newRaw !== ''
+                        const selectedExisting = mergeSelections[key] === 'existing'
+                        const selectedNew = mergeSelections[key] === 'new'
+
+                        return (
+                          <tr key={key} className="border-b border-gray-50 last:border-0">
+                            <td className="px-3 py-2.5 text-xs font-medium text-[#888888] align-top whitespace-nowrap">{label}</td>
+                            <td className="px-2 py-1.5 align-top">
+                              <label
+                                className={`flex items-start gap-2 cursor-pointer rounded-md px-2 py-1.5 transition-colors ${
+                                  hasE
+                                    ? selectedExisting
+                                      ? 'bg-brand-maroon/5 border border-brand-maroon/30'
+                                      : 'hover:bg-gray-50'
+                                    : 'opacity-40 cursor-not-allowed'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={key}
+                                  value="existing"
+                                  disabled={!hasE}
+                                  checked={selectedExisting}
+                                  onChange={() => setMergeSelections(prev => ({ ...prev, [key]: 'existing' }))}
+                                  className="mt-0.5 accent-brand-maroon flex-shrink-0"
+                                />
+                                <span className="text-xs text-[#1A1A1A] break-words">
+                                  {displayValue(key, existingRaw, format)}
+                                </span>
+                              </label>
+                            </td>
+                            <td className="px-2 py-1.5 align-top">
+                              <label
+                                className={`flex items-start gap-2 cursor-pointer rounded-md px-2 py-1.5 transition-colors ${
+                                  hasN
+                                    ? selectedNew
+                                      ? 'bg-brand-maroon/5 border border-brand-maroon/30'
+                                      : 'hover:bg-gray-50'
+                                    : 'opacity-40 cursor-not-allowed'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={key}
+                                  value="new"
+                                  disabled={!hasN}
+                                  checked={selectedNew}
+                                  onChange={() => setMergeSelections(prev => ({ ...prev, [key]: 'new' }))}
+                                  className="mt-0.5 accent-brand-maroon flex-shrink-0"
+                                />
+                                <span className="text-xs text-[#1A1A1A] break-words">
+                                  {displayValue(key, newRaw, format)}
+                                </span>
+                              </label>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {mergeRows.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-3 py-6 text-center text-sm text-[#888888]">
+                            No differing fields to compare.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => setDupMergeMode(false)}
+                  disabled={merging}
+                >
+                  Back
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={merging}
+                  onClick={doMerge}
+                >
+                  {merging ? 'Merging…' : 'Confirm Merge'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Familiarity popup — shown after both new creation and merge */}
       <Dialog open={familiarityPopup !== null} onOpenChange={(open) => { if (!open) { setFamiliarityPopup(null); router.push('/dashboard/singles') } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
