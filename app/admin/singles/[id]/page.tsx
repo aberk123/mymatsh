@@ -76,6 +76,7 @@ type FamilyRecord = Record<string, any> | null
 interface Photo { id: string; public_url: string; position: number; caption: string | null }
 interface ShadchanEntry { shadchan_id: string; is_familiar: boolean; full_name: string; email: string | null; city: string | null }
 interface CreatorShadchan { id: string; full_name: string; email: string | null; phone: string | null; city: string | null }
+interface AvailableShadchan { id: string; full_name: string; city: string | null }
 
 interface DetailPayload {
   single: SingleRecord
@@ -84,6 +85,7 @@ interface DetailPayload {
   photos: Photo[]
   creatorShadchan: CreatorShadchan | null
   shadchanList: ShadchanEntry[]
+  availableShadchanim: AvailableShadchan[]
 }
 
 function fmtHeight(inches: number | null | undefined): string {
@@ -109,6 +111,10 @@ export default function AdminSingleDetailPage() {
   const [newStatus, setNewStatus] = useState<SingleStatus>('available')
   const [statusSaving, setStatusSaving] = useState(false)
   const [statusError, setStatusError] = useState('')
+  const [assignShadchanId, setAssignShadchanId] = useState('')
+  const [assignSaving, setAssignSaving] = useState(false)
+  const [assignError, setAssignError] = useState('')
+  const [assignSuccess, setAssignSuccess] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -142,6 +148,34 @@ export default function AdminSingleDetailPage() {
     setStatusSaving(false)
   }
 
+  async function handleAssignShadchan() {
+    if (!assignShadchanId) return
+    setAssignSaving(true)
+    setAssignError('')
+    setAssignSuccess(false)
+    const res = await fetch(`/api/admin/singles/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ created_by_shadchan_id: assignShadchanId }),
+    })
+    if (res.ok) {
+      const selected = data?.availableShadchanim.find(s => s.id === assignShadchanId)
+      if (selected) {
+        setData(prev => prev ? {
+          ...prev,
+          creatorShadchan: { id: selected.id, full_name: selected.full_name, email: null, phone: null, city: selected.city },
+          single: { ...prev.single, created_by_shadchan_id: assignShadchanId },
+        } : prev)
+      }
+      setAssignSuccess(true)
+      setAssignShadchanId('')
+    } else {
+      const json = await res.json()
+      setAssignError(json.error ?? 'Failed to assign shadchan.')
+    }
+    setAssignSaving(false)
+  }
+
   if (loading) {
     return (
       <AppLayout navItems={navItems} title="Single Details" role="platform_admin">
@@ -161,7 +195,7 @@ export default function AdminSingleDetailPage() {
     )
   }
 
-  const { single, education, family, photos, creatorShadchan, shadchanList } = data
+  const { single, education, family, photos, creatorShadchan, shadchanList, availableShadchanim } = data
   const fullName = `${single.first_name} ${single.last_name}`
   const familiarShadchanim = shadchanList.filter(s => s.is_familiar)
 
@@ -359,10 +393,10 @@ export default function AdminSingleDetailPage() {
             <Star className="h-4 w-4 text-brand-maroon" /> Shadchan Info
           </h2>
 
-          {creatorShadchan ? (
-            <div className="mb-4 pb-4 border-b border-gray-100">
-              <p className="text-xs font-medium text-[#888888] uppercase tracking-wide mb-2">Added By</p>
-              <div className="flex items-center gap-3">
+          <div className="mb-4 pb-4 border-b border-gray-100">
+            <p className="text-xs font-medium text-[#888888] uppercase tracking-wide mb-2">Assigned Shadchan</p>
+            {creatorShadchan ? (
+              <div className="flex items-center gap-3 mb-3">
                 <div>
                   <p className="text-sm font-medium text-[#1A1A1A]">{creatorShadchan.full_name}</p>
                   <p className="text-xs text-[#888888]">
@@ -370,10 +404,40 @@ export default function AdminSingleDetailPage() {
                   </p>
                 </div>
               </div>
-            </div>
-          ) : (
-            <p className="text-sm text-[#888888] mb-4 pb-4 border-b border-gray-100">No shadchan assigned.</p>
-          )}
+            ) : (
+              <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                No shadchan assigned — this single is unrepresented.
+              </p>
+            )}
+            {availableShadchanim.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  className="input-base flex-1 min-w-[200px]"
+                  value={assignShadchanId}
+                  onChange={e => { setAssignShadchanId(e.target.value); setAssignError(''); setAssignSuccess(false) }}
+                >
+                  <option value="">
+                    {creatorShadchan ? '— Reassign shadchan…' : '— Assign a shadchan…'}
+                  </option>
+                  {availableShadchanim.map(sh => (
+                    <option key={sh.id} value={sh.id}>
+                      {sh.full_name}{sh.city ? ` (${sh.city})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!assignShadchanId || assignSaving}
+                  onClick={handleAssignShadchan}
+                >
+                  {assignSaving ? 'Saving…' : 'Assign'}
+                </Button>
+              </div>
+            )}
+            {assignError && <p className="text-xs text-red-600 mt-2">{assignError}</p>}
+            {assignSuccess && <p className="text-xs text-green-600 mt-2">Shadchan assigned successfully.</p>}
+          </div>
 
           <div>
             <p className="text-xs font-medium text-[#888888] uppercase tracking-wide mb-2">

@@ -43,6 +43,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const tab = searchParams.get('tab') ?? 'mine'
+  const unassigned = searchParams.get('unassigned') === 'true'
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
   const perPage = Math.min(100, Math.max(1, parseInt(searchParams.get('per_page') ?? '20', 10)))
   const search = (searchParams.get('search') ?? '').trim()
@@ -126,6 +127,16 @@ export async function GET(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     query = (adminClient.from('singles') as any)
       .select('id, first_name, last_name, gender, age, city, state, status, hashkafa, plans, height_inches, created_at, created_by_shadchan_id', { count: 'exact' })
+    if (unassigned) {
+      query = query.is('created_by_shadchan_id', null)
+    }
+  } else if (tab === 'unrepresented') {
+    // Singles with no shadchan, available for representation (shadchan browsing)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query = (adminClient.from('singles') as any)
+      .select('id, first_name, last_name, gender, age, city, state, status, hashkafa, plans, height_inches, created_at, created_by_shadchan_id', { count: 'exact' })
+      .is('created_by_shadchan_id', null)
+      .in('status', ['draft', 'available'])
   } else if (tab === 'mine') {
     // Union: created by this shadchan OR linked via junction table
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -171,7 +182,7 @@ export async function GET(request: Request) {
   if (labelFilterIds !== null && labelFilterIds.length > 0) query = query.in('id', labelFilterIds)
   if (starredIds !== null && starredIds.length > 0) query = query.in('id', starredIds)
 
-  query = tab === 'mine'
+  query = (tab === 'mine')
     ? query.order('created_at', { ascending: false })
     : query.order('first_name', { ascending: true })
 
@@ -186,9 +197,9 @@ export async function GET(request: Request) {
   const rows: any[] = singlesData ?? []
   const total = count ?? 0
 
-  // Resolve shadchan names for all/admin tabs
+  // Resolve shadchan names for all/admin/unrepresented tabs
   const shadchanMap: Record<string, string> = {}
-  if ((tab === 'all' || role === 'platform_admin') && rows.length > 0) {
+  if ((tab === 'all' || tab === 'unrepresented' || role === 'platform_admin') && rows.length > 0) {
     const shadchanIds = Array.from(new Set(rows.map((s) => s.created_by_shadchan_id).filter(Boolean)))
     if (shadchanIds.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -234,9 +245,9 @@ export async function GET(request: Request) {
     for (const s of starData ?? []) starredSet.add(s.single_id)
   }
 
-  // "In my list" flag for all tab (shadchan_singles membership)
+  // "In my list" flag for all/unrepresented tab (shadchan_singles membership)
   const inMyListSet = new Set<string>()
-  if (tab === 'all' && profileId && rows.length > 0) {
+  if ((tab === 'all' || tab === 'unrepresented') && profileId && rows.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: myListData } = await (adminClient.from('shadchan_singles') as any)
       .select('single_id')
@@ -430,7 +441,7 @@ export async function POST(request: Request) {
   // Insert new single
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: newSingle, error } = await (adminClient.from('singles') as any)
-    .insert({ ...body, created_by_shadchan_id: profile.id })
+    .insert({ ...body, created_by_shadchan_id: profile.id, source: 'shadchan' })
     .select('id')
     .single() as { data: { id: string } | null; error: unknown }
 

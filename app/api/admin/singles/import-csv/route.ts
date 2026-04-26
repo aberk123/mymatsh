@@ -113,6 +113,7 @@ export async function POST(request: Request) {
       gender,
       created_by_shadchan_id: shadchan_id || null,
       status: 'draft',
+      source: 'csv_import',
     }
 
     if (row.email?.trim()) record.email = row.email.trim()

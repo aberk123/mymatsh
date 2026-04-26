@@ -130,8 +130,9 @@ export interface Database {
         Row: {
           id: string
           user_id: string | null
-          created_by_shadchan_id: string
+          created_by_shadchan_id: string | null
           parent_id: string | null
+          source: string | null
           first_name: string
           last_name: string
           full_hebrew_name: string | null
@@ -304,7 +305,7 @@ export interface Database {
           phone: string | null
           email: string | null
           city: string | null
-          child_id: string
+          child_id: string | null
           created_by: string | null
           pledge_amount: number | null
           pledge_confirmed_at: string | null

@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   Star,
   X,
+  Handshake,
 } from 'lucide-react'
 import {
   Dialog,
@@ -70,7 +71,7 @@ interface ApiSingle {
   is_starred: boolean
 }
 
-type ActiveTab = 'mine' | 'all'
+type ActiveTab = 'mine' | 'all' | 'unrepresented'
 
 const PAGE_SIZE = 20
 
@@ -91,7 +92,8 @@ export default function SinglesPage() {
   const [page, setPage] = useState(1)
   const [singles, setSingles] = useState<ApiSingle[]>([])
   const [total, setTotal] = useState(0)
-  const [tabTotals, setTabTotals] = useState<{ mine: number | null; all: number | null }>({ mine: null, all: null })
+  const [tabTotals, setTabTotals] = useState<{ mine: number | null; all: number | null; unrepresented: number | null }>({ mine: null, all: null, unrepresented: null })
+  const [representingId, setRepresentingId] = useState<string | null>(null)
   const [labelsList, setLabelsList] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
@@ -179,7 +181,19 @@ export default function SinglesPage() {
     setAgeMax('')
     setHeightMin(0)
     setHeightMax(0)
+    setRepresentingId(null)
   }
+
+  const handleRepresent = useCallback(async (singleId: string) => {
+    setRepresentingId(singleId)
+    const res = await fetch(`/api/singles/${singleId}/represent`, { method: 'POST' })
+    setRepresentingId(null)
+    if (res.ok) {
+      setSingles(prev => prev.filter(s => s.id !== singleId))
+      setTotal(prev => Math.max(0, prev - 1))
+      setTabTotals(prev => ({ ...prev, unrepresented: prev.unrepresented !== null ? Math.max(0, prev.unrepresented - 1) : null }))
+    }
+  }, [])
 
   function clearAllFilters() {
     setGenderFilter('All')
@@ -402,19 +416,25 @@ export default function SinglesPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-gray-200 mb-4">
-        {(['mine', 'all'] as const).map(tab => (
+        {([
+          { key: 'mine', label: 'My Singles' },
+          { key: 'all', label: 'All Singles' },
+          { key: 'unrepresented', label: 'Unrepresented' },
+        ] as { key: ActiveTab; label: string }[]).map(({ key, label }) => (
           <button
-            key={tab}
-            onClick={() => switchTab(tab)}
+            key={key}
+            onClick={() => switchTab(key)}
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors min-h-[44px] ${
-              activeTab === tab
+              activeTab === key
                 ? 'border-brand-maroon text-brand-maroon'
                 : 'border-transparent text-[#888888] hover:text-[#555555]'
             }`}
           >
-            {tab === 'mine' ? 'My Singles' : 'All Singles'}
-            <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-              {tabTotals[tab] !== null ? tabTotals[tab] : '…'}
+            {label}
+            <span className={`ml-2 text-xs font-bold px-1.5 py-0.5 rounded-full ${
+              key === 'unrepresented' && tabTotals.unrepresented ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {tabTotals[key] !== null ? tabTotals[key] : '…'}
             </span>
           </button>
         ))}
@@ -623,6 +643,18 @@ export default function SinglesPage() {
                         )}
                       </>
                     )}
+                    {activeTab === 'unrepresented' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 min-h-[40px] text-brand-maroon"
+                        disabled={representingId === s.id}
+                        onClick={() => handleRepresent(s.id)}
+                      >
+                        <Handshake className="h-3.5 w-3.5" />
+                        {representingId === s.id ? 'Claiming…' : 'Represent'}
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))
@@ -717,7 +749,7 @@ export default function SinglesPage() {
                       <th className="table-th">Age</th>
                       <th className="table-th">City</th>
                       <th className="table-th">Hashkafa</th>
-                      <th className="table-th">Shadchan</th>
+                      {activeTab === 'all' && <th className="table-th">Shadchan</th>}
                       <th className="table-th">Your Labels</th>
                       <th className="table-th">Actions</th>
                     </tr>
@@ -740,7 +772,7 @@ export default function SinglesPage() {
                         <td className="table-td text-[#555555]">{s.age ?? '—'}</td>
                         <td className="table-td text-[#555555]">{[s.city, s.state].filter(Boolean).join(', ') || '—'}</td>
                         <td className="table-td text-[#555555] capitalize">{(s.hashkafa ?? '—').replace('_', ' ')}</td>
-                        <td className="table-td text-[#555555] text-xs">{s.shadchan_name}</td>
+                        {activeTab === 'all' && <td className="table-td text-[#555555] text-xs">{s.shadchan_name}</td>}
                         <td className="table-td">
                           <div className="flex flex-wrap gap-1">
                             {s.labels.map(label => (
@@ -754,7 +786,7 @@ export default function SinglesPage() {
                             <Link href={`/dashboard/singles/${s.id}`}>
                               <Button variant="ghost" size="icon" className="h-7 w-7" title="View"><Eye className="h-3.5 w-3.5" /></Button>
                             </Link>
-                            {s.in_my_list ? (
+                            {activeTab === 'all' && (s.in_my_list ? (
                               <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
                                 <CheckCircle className="h-3 w-3" />Added
                               </span>
@@ -762,13 +794,27 @@ export default function SinglesPage() {
                               <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => handleAddToList(s.id)}>
                                 <UserPlus className="h-3 w-3" />Add to My List
                               </Button>
+                            ))}
+                            {activeTab === 'unrepresented' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 gap-1 text-xs text-brand-maroon"
+                                disabled={representingId === s.id}
+                                onClick={() => handleRepresent(s.id)}
+                              >
+                                <Handshake className="h-3 w-3" />
+                                {representingId === s.id ? 'Claiming…' : 'Represent'}
+                              </Button>
                             )}
                           </div>
                         </td>
                       </tr>
                     ))}
                     {singles.length === 0 && (
-                      <tr><td colSpan={10} className="text-center py-12 text-[#888888] text-sm">No singles match your filters.</td></tr>
+                      <tr><td colSpan={activeTab === 'all' ? 10 : 9} className="text-center py-12 text-[#888888] text-sm">
+                        {activeTab === 'unrepresented' ? 'No unrepresented singles.' : 'No singles match your filters.'}
+                      </td></tr>
                     )}
                   </tbody>
                 </table>

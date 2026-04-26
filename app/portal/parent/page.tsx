@@ -10,6 +10,7 @@ import {
   ChevronRight,
   DollarSign,
   CheckCircle,
+  UserPlus,
 } from 'lucide-react'
 import { AppLayout } from '@/components/ui/app-layout'
 import { WelcomeBanner } from '@/components/ui/welcome-banner'
@@ -44,6 +45,7 @@ interface MessageSummary {
 export default function ParentDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [parentName, setParentName] = useState('')
+  const [childLinked, setChildLinked] = useState(false)
   const [childName, setChildName] = useState('')
   const [childAge, setChildAge] = useState<number | null>(null)
   const [childCity, setChildCity] = useState('')
@@ -80,20 +82,25 @@ export default function ParentDashboardPage() {
       setPledgeConfirmedAt(parent.pledge_confirmed_at)
 
       // Load child's singles record
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: child } = await (supabase.from('singles') as any)
-        .select('first_name, last_name, age, city, state, status')
-        .eq('id', parent.child_id)
-        .maybeSingle() as {
-          data: {
-            first_name: string
-            last_name: string
-            age: number | null
-            city: string | null
-            state: string | null
-            status: string
-          } | null
-        }
+      let child = null
+      if (parent.child_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase.from('singles') as any)
+          .select('first_name, last_name, age, city, state, status')
+          .eq('id', parent.child_id)
+          .maybeSingle() as {
+            data: {
+              first_name: string
+              last_name: string
+              age: number | null
+              city: string | null
+              state: string | null
+              status: string
+            } | null
+          }
+        child = data
+      }
+      setChildLinked(!!child)
 
       if (child) {
         setChildName(`${child.first_name} ${child.last_name}`.trim())
@@ -184,31 +191,49 @@ export default function ParentDashboardPage() {
               </Button>
             </Link>
           </div>
-          {childName ? (
-            <div className="flex flex-col items-center gap-3 py-2">
-              <Avatar name={childName} size="lg" />
-              <div className="text-center">
-                <p className="font-semibold text-[#1A1A1A]">{childName}</p>
-                <p className="text-sm text-[#555555]">
-                  {childAge ? `Age ${childAge}` : ''}
-                  {childAge && childCity ? ' · ' : ''}
-                  {childCity}
-                </p>
-                {childStatus && (
-                  <div className="mt-2 flex justify-center">
-                    <StatusBadge status={childStatus} />
-                  </div>
-                )}
+          {childLinked ? (
+            <>
+              <div className="flex flex-col items-center gap-3 py-2">
+                <Avatar name={childName} size="lg" />
+                <div className="text-center">
+                  <p className="font-semibold text-[#1A1A1A]">{childName}</p>
+                  <p className="text-sm text-[#555555]">
+                    {childAge ? `Age ${childAge}` : ''}
+                    {childAge && childCity ? ' · ' : ''}
+                    {childCity}
+                  </p>
+                  {childStatus && (
+                    <div className="mt-2 flex justify-center">
+                      <StatusBadge status={childStatus} />
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+              <Link href="/portal/parent/child">
+                <Button variant="outline-maroon" size="sm" className="w-full">
+                  View Full Profile
+                </Button>
+              </Link>
+            </>
           ) : (
-            <p className="text-sm text-[#888888] text-center py-4">No child profile found.</p>
+            <div className="flex flex-col items-center gap-4 py-4 text-center">
+              <div className="w-14 h-14 rounded-full bg-[#F8F0F5] flex items-center justify-center">
+                <UserPlus className="h-7 w-7 text-brand-maroon" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#1A1A1A]">No profile yet</p>
+                <p className="text-xs text-[#888888] mt-1 leading-relaxed">
+                  Add your child&apos;s profile so a shadchan can begin the process.
+                </p>
+              </div>
+              <Link href="/portal/parent/add-child" className="w-full">
+                <Button variant="primary" size="sm" className="w-full gap-2">
+                  <UserPlus className="h-4 w-4" />
+                  Add Your Child&apos;s Profile
+                </Button>
+              </Link>
+            </div>
           )}
-          <Link href="/portal/parent/child">
-            <Button variant="outline-maroon" size="sm" className="w-full">
-              View Full Profile
-            </Button>
-          </Link>
         </div>
 
         {/* Active Suggestions */}

@@ -52,7 +52,7 @@ const navItems: NavItem[] = [
   { label: 'Import Batches', href: '/admin/import-batches', icon: PackageOpen },
 ]
 
-type Gender = 'boys' | 'girls'
+type ActiveTab = 'boys' | 'girls' | 'unassigned'
 type SingleStatus = 'available' | 'on_hold' | 'engaged' | 'married' | 'inactive'
 
 const STATUS_OPTIONS: { value: SingleStatus; label: string }[] = [
@@ -85,14 +85,14 @@ interface KnownByShadchan {
 
 export default function AdminSinglesPage() {
   const router = useRouter()
-  const [gender, setGender] = useState<Gender>('boys')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('boys')
   const [searchInput, setSearchInput] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [singles, setSingles] = useState<SingleRow[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
-  const [genderTotals, setGenderTotals] = useState<{ boys: number | null; girls: number | null }>({ boys: null, girls: null })
+  const [tabTotals, setTabTotals] = useState<{ boys: number | null; girls: number | null; unassigned: number | null }>({ boys: null, girls: null, unassigned: null })
   const [statusModalId, setStatusModalId] = useState<string | null>(null)
   const [newStatus, setNewStatus] = useState<SingleStatus>('available')
   const [statusSaving, setStatusSaving] = useState(false)
@@ -107,14 +107,17 @@ export default function AdminSinglesPage() {
     return () => clearTimeout(timer)
   }, [searchInput])
 
-  // Fetch initial counts for both gender tabs
+  // Fetch initial counts for all tabs
   useEffect(() => {
     fetch('/api/singles?gender=male&page=1&per_page=1')
       .then(r => r.json())
-      .then(d => setGenderTotals(prev => ({ ...prev, boys: d.total ?? 0 })))
+      .then(d => setTabTotals(prev => ({ ...prev, boys: d.total ?? 0 })))
     fetch('/api/singles?gender=female&page=1&per_page=1')
       .then(r => r.json())
-      .then(d => setGenderTotals(prev => ({ ...prev, girls: d.total ?? 0 })))
+      .then(d => setTabTotals(prev => ({ ...prev, girls: d.total ?? 0 })))
+    fetch('/api/singles?unassigned=true&page=1&per_page=1')
+      .then(r => r.json())
+      .then(d => setTabTotals(prev => ({ ...prev, unassigned: d.total ?? 0 })))
   }, [])
 
   // Main data fetch
@@ -123,11 +126,12 @@ export default function AdminSinglesPage() {
     const fetchId = ++fetchRef.current
     setLoading(true)
 
-    const params = new URLSearchParams({
-      gender: gender === 'boys' ? 'male' : 'female',
-      page: String(page),
-      per_page: String(PAGE_SIZE),
-    })
+    const params = new URLSearchParams({ page: String(page), per_page: String(PAGE_SIZE) })
+    if (activeTab === 'unassigned') {
+      params.set('unassigned', 'true')
+    } else {
+      params.set('gender', activeTab === 'boys' ? 'male' : 'female')
+    }
     if (debouncedSearch) params.set('search', debouncedSearch)
 
     fetch(`/api/singles?${params}`)
@@ -141,10 +145,10 @@ export default function AdminSinglesPage() {
       .finally(() => {
         if (fetchRef.current === fetchId) setLoading(false)
       })
-  }, [gender, debouncedSearch, page])
+  }, [activeTab, debouncedSearch, page])
 
-  function switchGender(g: Gender) {
-    setGender(g)
+  function switchTab(t: ActiveTab) {
+    setActiveTab(t)
     setPage(1)
   }
 
@@ -202,32 +206,28 @@ export default function AdminSinglesPage() {
   return (
     <AppLayout navItems={navItems} title="Singles" role="platform_admin">
       <div className="flex gap-1 border-b border-gray-200 mb-6">
-        <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            gender === 'boys'
-              ? 'border-brand-pink text-brand-pink'
-              : 'border-transparent text-[#888888] hover:text-[#555555]'
-          }`}
-          onClick={() => switchGender('boys')}
-        >
-          Boys
-          <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {genderTotals.boys !== null ? genderTotals.boys : '…'}
-          </span>
-        </button>
-        <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            gender === 'girls'
-              ? 'border-brand-pink text-brand-pink'
-              : 'border-transparent text-[#888888] hover:text-[#555555]'
-          }`}
-          onClick={() => switchGender('girls')}
-        >
-          Girls
-          <span className="ml-2 bg-gray-100 text-gray-600 text-xs font-bold px-1.5 py-0.5 rounded-full">
-            {genderTotals.girls !== null ? genderTotals.girls : '…'}
-          </span>
-        </button>
+        {([
+          { key: 'boys', label: 'Boys', count: tabTotals.boys },
+          { key: 'girls', label: 'Girls', count: tabTotals.girls },
+          { key: 'unassigned', label: 'Unassigned', count: tabTotals.unassigned },
+        ] as { key: ActiveTab; label: string; count: number | null }[]).map(({ key, label, count }) => (
+          <button
+            key={key}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === key
+                ? 'border-brand-pink text-brand-pink'
+                : 'border-transparent text-[#888888] hover:text-[#555555]'
+            }`}
+            onClick={() => switchTab(key)}
+          >
+            {label}
+            <span className={`ml-2 text-xs font-bold px-1.5 py-0.5 rounded-full ${
+              key === 'unassigned' && count ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+            }`}>
+              {count !== null ? count : '…'}
+            </span>
+          </button>
+        ))}
       </div>
 
       <div className="card">
@@ -315,7 +315,7 @@ export default function AdminSinglesPage() {
                   {singles.length === 0 && (
                     <tr>
                       <td colSpan={7} className="table-td text-center text-[#888888] py-8">
-                        No {gender} found.
+                        {activeTab === 'unassigned' ? 'No unassigned singles.' : `No ${activeTab} found.`}
                       </td>
                     </tr>
                   )}
