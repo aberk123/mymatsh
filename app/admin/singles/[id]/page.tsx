@@ -19,6 +19,7 @@ import {
   PackageOpen,
   ChevronLeft,
   RefreshCw,
+  Trash2,
   User,
   Mail,
   Phone,
@@ -27,6 +28,7 @@ import {
   Users2,
   Star,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { AppLayout } from '@/components/ui/app-layout'
 import { StatusBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -115,6 +117,8 @@ export default function AdminSingleDetailPage() {
   const [assignSaving, setAssignSaving] = useState(false)
   const [assignError, setAssignError] = useState('')
   const [assignSuccess, setAssignSuccess] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -176,6 +180,22 @@ export default function AdminSingleDetailPage() {
     setAssignSaving(false)
   }
 
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/singles/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        toast.error((json as { error?: string }).error ?? 'Failed to delete.')
+        return
+      }
+      toast.success('Single profile deleted.')
+      router.push('/admin/singles')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <AppLayout navItems={navItems} title="Single Details" role="platform_admin">
@@ -230,15 +250,26 @@ export default function AdminSingleDetailPage() {
                 </div>
               </div>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => { setNewStatus(single.status as SingleStatus); setStatusModalOpen(true) }}
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Edit Status
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => { setNewStatus(single.status as SingleStatus); setStatusModalOpen(true) }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Edit Status
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -471,6 +502,28 @@ export default function AdminSingleDetailPage() {
         </div>
 
       </div>
+
+      {/* Delete Confirmation */}
+      <Dialog open={deleteOpen} onOpenChange={(open) => { if (!open) setDeleteOpen(false) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Single Profile</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-2">
+            <p className="text-sm text-[#555555]">
+              Are you sure you want to delete{' '}
+              <span className="font-semibold text-[#1A1A1A]">{fullName}</span>?
+              This will permanently remove their profile, all match records they are part of, and unlink them from any shadchan. This cannot be undone.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" size="md" onClick={() => setDeleteOpen(false)} disabled={deleting}>Cancel</Button>
+            <Button variant="danger" size="md" disabled={deleting} onClick={handleDelete}>
+              {deleting ? 'Deleting…' : 'Delete Profile'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Status Modal */}
       <Dialog open={statusModalOpen} onOpenChange={(open) => { if (!open) setStatusModalOpen(false) }}>

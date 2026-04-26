@@ -100,6 +100,75 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   return NextResponse.json({ single, education, family, photos: photos ?? [], creatorShadchan, shadchanList, availableShadchanim: availableShadchanim ?? [] })
 }
 
+export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
+  const cookieStore = await cookies()
+  const callerClient = createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) }
+          catch { /* ignore */ }
+        },
+      },
+    }
+  )
+
+  const { data: { user } } = await callerClient.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: callerRow } = await callerClient.from('users').select('role').eq('id', user.id).maybeSingle()
+  if ((callerRow as { role: string } | null)?.role !== 'platform_admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const adminClient = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  // Fetch single to get user_id before deleting
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: single } = await (adminClient.from('singles') as any)
+    .select('id, user_id')
+    .eq('id', params.id)
+    .maybeSingle() as { data: { id: string; user_id: string | null } | null }
+
+  if (!single) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Delete match records
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (adminClient.from('matches') as any)
+    .delete()
+    .or(`single1_id.eq.${params.id},single2_id.eq.${params.id}`)
+
+  // Delete shadchan_singles records
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (adminClient.from('shadchan_singles') as any)
+    .delete()
+    .eq('single_id', params.id)
+
+  // Delete the single
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (adminClient.from('singles') as any)
+    .delete()
+    .eq('id', params.id)
+
+  if (error) return NextResponse.json({ error: (error as { message: string }).message }, { status: 500 })
+
+  // Delete user account if one exists
+  if (single.user_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (adminClient.from('users') as any).delete().eq('id', single.user_id)
+    await adminClient.auth.admin.deleteUser(single.user_id)
+  }
+
+  return NextResponse.json({ ok: true })
+}
+
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const cookieStore = await cookies()
   const callerClient = createServerClient<Database>(

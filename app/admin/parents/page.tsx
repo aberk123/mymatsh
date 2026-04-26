@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
@@ -50,6 +51,7 @@ interface ParentRow {
 }
 
 export default function AdminParentsPage() {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [parents, setParents] = useState<ParentRow[]>([])
   const [search, setSearch] = useState('')
@@ -140,7 +142,11 @@ export default function AdminParentsPage() {
                 </thead>
                 <tbody>
                   {filtered.map((p) => (
-                    <tr key={p.id} className="table-row">
+                    <tr
+                      key={p.id}
+                      className="table-row cursor-pointer hover:bg-gray-50"
+                      onClick={() => router.push(`/admin/parents/${p.id}`)}
+                    >
                       <td className="table-td font-medium text-[#1A1A1A]">{p.fullName}</td>
                       <td className="table-td text-[#555555]">{p.city || '—'}</td>
                       <td className="table-td text-[#555555]">{p.email ?? '—'}</td>

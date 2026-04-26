@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
@@ -86,6 +87,7 @@ interface ShadchanRow {
 }
 
 export default function AdminShadchanimPage() {
+  const router = useRouter()
   const [tab, setTab] = useState<'pending' | 'all'>('pending')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -313,7 +315,11 @@ export default function AdminShadchanimPage() {
               </thead>
               <tbody>
                 {pendingFiltered.map((s) => (
-                  <tr key={s.userId} className="table-row">
+                  <tr
+                    key={s.userId}
+                    className={`table-row ${s.hasProfile ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                    onClick={() => s.hasProfile && s.profileId && router.push(`/admin/shadchanim/${s.userId}`)}
+                  >
                     <td className="table-td font-medium text-[#1A1A1A]">
                       <div className="flex items-center gap-2 flex-wrap">
                         {s.hasProfile ? (
@@ -340,7 +346,7 @@ export default function AdminShadchanimPage() {
                           size="sm"
                           className="gap-1 bg-green-600 hover:bg-green-700 text-white border-green-600"
                           disabled={actionLoading}
-                          onClick={() => setConfirmId(s.userId)}
+                          onClick={(e) => { e.stopPropagation(); setConfirmId(s.userId) }}
                         >
                           <CheckCircle className="h-3.5 w-3.5" />
                           Approve
@@ -350,7 +356,7 @@ export default function AdminShadchanimPage() {
                           size="sm"
                           className="gap-1"
                           disabled={actionLoading}
-                          onClick={() => handleReject(s.userId)}
+                          onClick={(e) => { e.stopPropagation(); handleReject(s.userId) }}
                         >
                           <XCircle className="h-3.5 w-3.5" />
                           Reject
@@ -387,7 +393,11 @@ export default function AdminShadchanimPage() {
               </thead>
               <tbody>
                 {allFiltered.map((s) => (
-                  <tr key={s.userId} className="table-row">
+                  <tr
+                    key={s.userId}
+                    className={`table-row ${s.hasProfile ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                    onClick={() => s.hasProfile && router.push(`/admin/shadchanim/${s.userId}`)}
+                  >
                     <td className="table-td font-medium text-[#1A1A1A]">
                       <div className="flex items-center gap-2 flex-wrap">
                         {s.hasProfile ? (
