@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   LayoutDashboard, Users, UserCheck, Building2, Heart, Newspaper,
   DollarSign, ClipboardList, UsersRound, Home, BookOpen, MessageSquare,
-  PackageOpen, ChevronLeft, User, Mail, Phone, MapPin, Pencil, Trash2, X, Check,
+  PackageOpen, ChevronLeft, User, Mail, Phone, Pencil, Trash2, X, Check,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppLayout } from '@/components/ui/app-layout'

@@ -414,11 +414,13 @@ export default function ImportBatchDetailPage() {
 
                       {/* Photo */}
                       <td className="px-2 py-1.5">
+                        {/* eslint-disable @next/next/no-img-element */}
                         {record.photo_url ? (
                           <img src={record.photo_url} alt="" className="w-10 h-10 rounded object-cover" />
                         ) : (
                           <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-[#cccccc] text-[10px]">—</div>
                         )}
+                        {/* eslint-enable @next/next/no-img-element */}
                       </td>
 
                       {/* First Name */}

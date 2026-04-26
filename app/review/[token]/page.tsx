@@ -154,11 +154,13 @@ export default function ReviewPage() {
                   return (
                     <tr key={record._id} className="border-b border-gray-100 last:border-0">
                       <td className="px-4 py-3">
+                        {/* eslint-disable @next/next/no-img-element */}
                         {record.photo_url ? (
                           <img src={record.photo_url} alt="" className="w-11 h-11 rounded-lg object-cover" />
                         ) : (
                           <div className="w-11 h-11 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300 text-xs">—</div>
                         )}
+                        {/* eslint-enable @next/next/no-img-element */}
                       </td>
                       <td className="px-4 py-3 font-medium text-[#1A1A1A]">
                         {record.first_name} {record.last_name}

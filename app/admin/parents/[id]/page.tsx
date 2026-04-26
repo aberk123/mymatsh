@@ -330,7 +330,7 @@ export default function AdminParentDetailPage() {
                   <p className="text-sm font-medium text-[#1A1A1A]">Delete parent account AND child profile</p>
                   <p className="text-xs text-[#888888] mt-0.5">
                     Removes both the parent account and{' '}
-                    <span className="font-medium">{child.first_name} {child.last_name}</span>'s single profile, including all match records. This cannot be undone.
+                    <span className="font-medium">{child.first_name} {child.last_name}</span>&apos;s single profile, including all match records. This cannot be undone.
                   </p>
                 </div>
               </label>
