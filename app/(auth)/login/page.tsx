@@ -156,6 +156,12 @@ function LoginForm() {
           Sign Up
         </Link>
       </p>
+      <p className="text-sm text-center text-[#555555] mt-2">
+        Are you a shadchan?{' '}
+        <Link href="/signup/shadchan" className="text-brand-maroon font-medium hover:underline">
+          Apply for an account
+        </Link>
+      </p>
     </div>
   )
 }

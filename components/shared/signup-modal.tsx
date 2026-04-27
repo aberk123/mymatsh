@@ -108,6 +108,7 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [submitError, setSubmitError] = useState('')
   // Duplicate detection for single role
   const [duplicateMatch, setDuplicateMatch] = useState<DuplicateMatch | null>(null)
   const [claimSingleId, setClaimSingleId] = useState<string | null>(null)
@@ -178,19 +179,25 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
     if (Object.keys(e).length > 0) { setErrors(e); return }
 
     setSubmitting(true)
+    setSubmitError('')
     try {
       const body = selectedRole === 'shadchan'
         ? { role: 'shadchan', ...shadchanForm }
         : { role: selectedRole, ...simpleForm, claim_single_id: claimSingleId ?? undefined }
 
-      await fetch('/api/auth/signup', {
+      const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        setSubmitError((json as { error?: string }).error ?? 'Something went wrong. Please try again.')
+        return
+      }
       setSubmitted(true)
     } catch {
-      // show generic error
+      setSubmitError('Network error. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -205,6 +212,7 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
       setSimpleForm(blankSimple)
       setErrors({})
       setSubmitted(false)
+      setSubmitError('')
       setDuplicateMatch(null)
       setClaimSingleId(null)
     }, 300)
@@ -563,6 +571,14 @@ export function SignUpModal({ open, onClose }: SignUpModalProps) {
             </div>
           )}
         </div>
+
+        {submitError && !submitted && (
+          <div className="px-6 pb-2">
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {submitError}
+            </p>
+          </div>
+        )}
 
         <DialogFooter>
           {submitted ? (

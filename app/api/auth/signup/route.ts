@@ -2,6 +2,8 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { type Database } from '@/types/database'
+import { sendEmail } from '@/lib/utils/send-email'
+import { emailTemplate } from '@/lib/utils/email-template'
 
 export async function POST(request: Request) {
   try {
@@ -143,6 +145,23 @@ export async function POST(request: Request) {
         await (adminClient.from('users') as any).delete().eq('id', data.user.id)
         await adminClient.auth.admin.deleteUser(data.user.id)
         return NextResponse.json({ error: 'Failed to create shadchan profile' }, { status: 500 })
+      }
+
+      // Notify admin of new application
+      try {
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Unknown'
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://mymatsh.com'
+        const html = emailTemplate(
+          `<p>A new shadchan application has been submitted on MyMatSH.</p>
+           <p><strong>Name:</strong> ${fullName}<br>
+           <strong>Email:</strong> ${email?.trim() || '—'}<br>
+           <strong>Phone:</strong> ${phone?.trim() || '—'}</p>`,
+          'Review in Admin Panel',
+          `${appUrl}/admin/shadchanim`
+        )
+        await sendEmail('ari@thevoiceoflakewood.com', `New Shadchan Application: ${fullName}`, html)
+      } catch (err) {
+        console.error('[signup] admin notification error:', err)
       }
     }
 

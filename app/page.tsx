@@ -78,6 +78,12 @@ export default function LandingPage() {
               </Button>
             </Link>
           </div>
+          <p className="text-white/50 text-xs mt-4">
+            Are you a shadchan?{' '}
+            <Link href="/signup/shadchan" className="text-white/80 hover:text-white underline underline-offset-2 transition-colors">
+              Apply for an account
+            </Link>
+          </p>
         </div>
       </section>
 
