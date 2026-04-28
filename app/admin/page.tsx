@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
@@ -68,6 +69,7 @@ export default function AdminDashboardPage() {
   const [pendingShadchanim, setPendingShadchanim] = useState<PendingShadchan[]>([])
   const [recentAudit, setRecentAudit] = useState<AuditEntry[]>([])
   const [actionLoading, setActionLoading] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     async function load() {
@@ -148,15 +150,15 @@ export default function AdminDashboardPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
-        <StatCard label="Total Users" value={totalUsers} icon={Users} />
+        <StatCard label="Total Users" value={totalUsers} icon={Users} onClick={() => router.push('/admin/users')} />
         <StatCard
           label="Pending Approvals"
           value={pendingCount}
           icon={UserCheck}
-          onClick={() => window.location.assign('/admin/shadchanim')}
+          onClick={() => router.push('/admin/shadchanim')}
         />
-        <StatCard label="Active Singles" value={activeSingles} icon={Heart} />
-        <StatCard label="Organizations" value={orgCount} icon={Building2} />
+        <StatCard label="Active Singles" value={activeSingles} icon={Heart} onClick={() => router.push('/admin/singles')} />
+        <StatCard label="Organizations" value={orgCount} icon={Building2} onClick={() => router.push('/admin/organizations')} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-6">
